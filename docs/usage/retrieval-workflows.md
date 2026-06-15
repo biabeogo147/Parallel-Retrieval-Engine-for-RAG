@@ -197,7 +197,7 @@ mpirun -np 4 ./build/debug/parallel_retriever \
 
 **Next step**
 
-- Add optional run-summary metrics or move to benchmark automation.
+- Read [results-csv-reference.md](results-csv-reference.md) if you want a detailed explanation of every output column, then add optional run-summary metrics or move to benchmark automation.
 
 ## 7. Optional Run-Summary Metrics
 
@@ -236,7 +236,7 @@ mpirun -np 4 ./build/debug/parallel_retriever \
 
 **Next step**
 
-- Continue to [benchmark-workflows.md](benchmark-workflows.md) if you want the full experiment pipeline.
+- Continue to [results-csv-reference.md](results-csv-reference.md) for a detailed explanation of the run-summary CSV columns, or move directly to [benchmark-workflows.md](benchmark-workflows.md) if you want the full experiment pipeline.
 
 ## 8. Full Minimal Working Session
 
@@ -286,4 +286,4 @@ mpirun -np 4 ./build/debug/parallel_retriever \
 
 **Next step**
 
-- Use larger dimensions and dataset sizes, or run the full benchmark automation.
+- Use [results-csv-reference.md](results-csv-reference.md) to interpret the generated CSVs, then try larger dimensions and dataset sizes or run the full benchmark automation.

@@ -63,6 +63,8 @@ That file currently stores:
 
 The later stage scripts load this file automatically. In the normal flow, do not edit it by hand.
 
+For a detailed explanation of the CSV files produced by these stages, including every output column, see [results-csv-reference.md](results-csv-reference.md).
+
 ## 1. Default Full Benchmark Run
 
 **Prerequisites**
@@ -97,7 +99,7 @@ bash ./scripts/run_all_experiments.sh
 
 **Next step**
 
-- Inspect individual stage outputs or re-run with a reduced custom profile.
+- Inspect the generated CSVs with [results-csv-reference.md](results-csv-reference.md), or re-run with a reduced custom profile.
 
 ## 2. Stage: Runtime-By-N Selection
 
@@ -243,7 +245,7 @@ bash ./scripts/run_all_experiments.sh
 
 **Next step**
 
-- Compare the smoke profile outputs with the default profile outputs.
+- Compare the smoke profile outputs with the default profile outputs, using [results-csv-reference.md](results-csv-reference.md) to interpret each CSV schema.
 
 ## Notes
 

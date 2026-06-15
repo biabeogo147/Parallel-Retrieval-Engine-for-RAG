@@ -21,8 +21,9 @@ Use `docs/development/` for:
 
 1. [getting-started-wsl.md](getting-started-wsl.md)
 2. [retrieval-workflows.md](retrieval-workflows.md)
-3. [benchmark-workflows.md](benchmark-workflows.md)
-4. [troubleshooting.md](troubleshooting.md)
+3. [results-csv-reference.md](results-csv-reference.md)
+4. [benchmark-workflows.md](benchmark-workflows.md)
+5. [troubleshooting.md](troubleshooting.md)
 
 If you only need the shortest path after cloning, start with `getting-started-wsl.md`, then jump directly to the specific workflow you need.
 
@@ -77,5 +78,6 @@ If you want the shortest successful path:
 
 1. Follow [getting-started-wsl.md](getting-started-wsl.md).
 2. Run the small synthetic flow in [retrieval-workflows.md](retrieval-workflows.md).
-3. When that works, move to [benchmark-workflows.md](benchmark-workflows.md).
-4. If anything fails, check [troubleshooting.md](troubleshooting.md).
+3. Read [results-csv-reference.md](results-csv-reference.md) to understand the generated outputs.
+4. When that works, move to [benchmark-workflows.md](benchmark-workflows.md).
+5. If anything fails, check [troubleshooting.md](troubleshooting.md).

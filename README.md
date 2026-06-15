@@ -86,6 +86,7 @@ This is the compact onboarding path. For the full command-first workflow set, us
 
 - `docs/usage/getting-started-wsl.md`
 - `docs/usage/retrieval-workflows.md`
+- `docs/usage/results-csv-reference.md`
 - `docs/usage/benchmark-workflows.md`
 - `docs/usage/troubleshooting.md`
 
@@ -118,6 +119,7 @@ Still deferred to later phases:
 - `docs/usage/README.md`
 - `docs/usage/getting-started-wsl.md`
 - `docs/usage/retrieval-workflows.md`
+- `docs/usage/results-csv-reference.md`
 - `docs/usage/benchmark-workflows.md`
 - `docs/usage/troubleshooting.md`
 - `docs/development/project_specification.md`
