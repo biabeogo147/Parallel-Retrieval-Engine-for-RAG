@@ -51,8 +51,7 @@ After Ubuntu is available, work inside WSL from the canonical repo path.
 
 For a folder-by-folder explanation, see:
 
-- `docs/development/codebase_layout.md`
-- `docs/development/dev_workflow.md`
+- `docs/development/developer_guide.md`
 
 ## Quickstart in WSL
 
@@ -127,13 +126,11 @@ Still deferred to later phases:
 
 ## Documentation Index
 
-- `docs/development/project_scope.md`
-- `docs/development/algorithm_design.md`
-- `docs/development/benchmark_data.md`
-- `docs/development/environment_setup.md`
-- `docs/development/dev_workflow.md`
-- `docs/development/codebase_layout.md`
-- `docs/development/dataset_pipeline.md`
+- `AGENTS.md`
+- `docs/development/project_specification.md`
+- `docs/development/data_pipeline_and_benchmarks.md`
+- `docs/development/developer_guide.md`
+- `docs/development/source_guide.md`
 - `docs/development/parallel_agent_memory_retriever_plan.md`
 - `docs/plans/2026-06-15-phase-0-documentation.md`
 - `docs/plans/2026-06-15-phase-1-foundation.md`
