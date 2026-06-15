@@ -132,6 +132,15 @@ ParseResult parse_config(const AppMode mode, const int argc, const char* const a
             continue;
         }
 
+        if (argument == "--run-metrics") {
+            const auto value = read_value(argument);
+            if (!value.ok) {
+                return value;
+            }
+            result.config.run_metrics_path = value.error;
+            continue;
+        }
+
         return failure("Unknown option for " + binary_name(mode) + ": " + argument);
     }
 
@@ -179,6 +188,7 @@ std::string usage_text(const AppMode mode) {
     usage << "  --output <path>        Path to the output CSV file.\n";
     usage << "  --topk <int>           Number of results to return.\n";
     usage << "  --log-level <level>    One of: debug, info, warn, error.\n";
+    usage << "  --run-metrics <path>   Path to the one-run summary metrics CSV file.\n";
 
     if (mode == AppMode::Parallel) {
         usage << "  --metrics <path>       Path to the per-rank metrics CSV file.\n";

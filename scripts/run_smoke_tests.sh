@@ -15,6 +15,7 @@ require_command mpirun
 cmake --build "$build_dir"
 ctest --test-dir "$build_dir" --output-on-failure
 "$build_dir/sequential_retriever" --help >/dev/null
+"$build_dir/verify_results" --help >/dev/null
 
 if [ "$(id -u)" -eq 0 ]; then
     OMPI_ALLOW_RUN_AS_ROOT=1 \

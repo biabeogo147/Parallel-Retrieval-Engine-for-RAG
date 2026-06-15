@@ -2,6 +2,8 @@
 
 This file merges the former `environment_setup.md`, `dev_workflow.md`, and `codebase_layout.md` without shortening their content.
 
+Fresh-clone, command-first operational onboarding now lives under `docs/usage/`. Start with `../usage/README.md` if you want the shortest path from clone to working commands. This guide remains the deeper technical development reference behind those workflows.
+
 ## Included Documents
 
 - `environment_setup.md`
@@ -354,6 +356,101 @@ The current parallel output contracts are:
 - `parallel_retriever` reads the memory dataset per-rank via `BinaryDataset::read_shard(...)`
 - rank `0` reads the full query payload, broadcasts one query vector at a time, gathers fixed-size local top-k buffers, merges the global top-k, and writes both CSV outputs
 
+## Phase 5 Correctness Verification Flow
+
+Compare sequential and parallel top-k CSV outputs with an explicit score tolerance:
+
+```bash
+./build/debug/verify_results \
+  --sequential results/sequential_topk.csv \
+  --parallel results/parallel_topk.csv \
+  --epsilon 1e-5 \
+  --output results/correctness.csv
+```
+
+The current correctness output contract is:
+
+- `correctness.csv` uses:
+  - `query_id,k,matched,matched_ids,max_score_diff,status`
+- `matched` is written as `true` or `false`
+- `matched_ids` counts exact `memory_id` matches at the same `rank_position`
+- `max_score_diff` is the largest absolute score difference for aligned ranks in that query
+- `status` is `PASS` when `matched_ids == k` and `max_score_diff <= epsilon`, otherwise `FAIL`
+- `verify_results` returns:
+  - `0` when all queries pass
+  - `1` when comparison succeeds but at least one query fails
+  - `2` for invalid CLI arguments, malformed CSV input, or runtime errors
+
+## Phase 6 Run-Summary Metrics Flow
+
+Both retriever binaries now support an optional one-run summary metrics output for benchmark automation:
+
+```bash
+./build/debug/sequential_retriever \
+  --vectors data/memory_vectors.bin \
+  --queries data/query_vectors.bin \
+  --topk 10 \
+  --output results/sequential_topk.csv \
+  --run-metrics results/sequential_run_metrics.csv
+
+mpirun -np 4 ./build/debug/parallel_retriever \
+  --vectors data/memory_vectors.bin \
+  --queries data/query_vectors.bin \
+  --topk 10 \
+  --output results/parallel_topk.csv \
+  --metrics results/parallel_metrics.csv \
+  --run-metrics results/parallel_run_metrics.csv
+```
+
+The current run-summary CSV contract is:
+
+- `N,D,Q,k,P,compute_time,communication_time,total_time`
+- sequential rows always use `P=1` and `communication_time=0`
+- sequential `total_time` matches the benchmarked local-search window
+- parallel `total_time` matches `global_total_time` from the per-rank metrics CSV
+- these one-row CSV files are intended as script inputs, not long-lived final benchmark tables
+
+## Phase 7 Benchmark Automation Flow
+
+Run the full synthetic benchmark pipeline from WSL:
+
+```bash
+bash ./scripts/run_all_experiments.sh
+```
+
+The automation layer now provides:
+
+- `scripts/run_select_N.sh`
+  - generates `results/runtime_by_N.csv`
+  - writes `results/benchmark_selection.env`
+- `scripts/run_correctness.sh`
+  - generates `results/sequential_topk.csv`
+  - generates `results/parallel_topk.csv`
+  - generates `results/correctness.csv`
+- `scripts/run_granularity.sh`
+  - generates `results/granularity.csv`
+  - generates `results/granularity_summary.txt`
+- `scripts/run_speedup.sh`
+  - generates `results/speedup.csv`
+- `scripts/run_all_experiments.sh`
+  - runs the four benchmark stages
+  - creates `results/figures/*.png`
+
+Default benchmark knobs are controlled by environment variables:
+
+- `BENCH_D`
+- `BENCH_Q`
+- `BENCH_TOPK`
+- `BENCH_EPSILON`
+- `BENCH_N_CANDIDATES`
+- `BENCH_P_SELECTED`
+- `BENCH_P_LIST`
+- `BENCH_BUILD_DIR`
+- `BENCH_RESULTS_DIR`
+- `BENCH_SCRATCH_DIR`
+
+The plotting step bootstraps a repo-local `.venv/` and installs `matplotlib` on first use if it is not already available.
+
 Use the repository-local `data/` directory for synthetic outputs produced by development and smoke checks. Reserve `/mnt/e/data` for larger external benchmark corpora and converted real datasets added in later phases.
 
 ## Generated Artifacts
@@ -362,7 +459,9 @@ Generated files should stay inside these locations:
 
 - build outputs: `build/debug` and `build/release`
 - local synthetic datasets produced by the current pipeline: `data/`
-- benchmark outputs produced by future phases: `results/`
+- benchmark outputs produced by the current pipeline: `results/`
+- benchmark scratch/cache files: `.cache/benchmarks/`
+- plotting runtime and dependencies: `.venv/`
 
 Do not commit generated content from `build/`, `data/`, or `results/`.
 
@@ -371,9 +470,10 @@ Do not commit generated content from `build/`, `data/`, or `results/`.
 When you add or move docs:
 
 1. Keep implementation and architecture docs in `docs/development/`.
-2. Keep plan artifacts in `docs/plans/`.
-3. Update cross-links immediately if a doc path changes.
-4. Prefer WSL paths in all developer-facing commands.
+2. Keep user-facing operational how-to docs in `docs/usage/`.
+3. Keep plan artifacts in `docs/plans/`.
+4. Update cross-links immediately if a doc path changes.
+5. Prefer WSL paths in all developer-facing commands.
 
 
 ---
@@ -393,6 +493,8 @@ Public project headers for shared code used across binaries and tests.
 - `TopKHeap.hpp`: deterministic in-memory top-k candidate selection
 - `SequentialRetriever.hpp`: exact sequential retrieval over validated in-memory datasets
 - `ParallelRetriever.hpp`: global top-k merge and parallel metrics row type
+- `BenchmarkMetrics.hpp`: run-summary metrics rows, speedup rows, and run-metrics CSV writing
+- `CorrectnessChecker.hpp`: top-k CSV row model and sequential-vs-parallel comparison API
 - `MpiUtils.hpp`: blocking MPI helpers for query broadcast, fixed-size candidate gather, and startup/metrics coordination
 
 ### `src/`
@@ -406,6 +508,8 @@ Implementation files and entrypoints.
 - `TopKHeap.cpp`: heap maintenance and tie-break ordering
 - `SequentialRetriever.cpp`: exact dot-product scan for one query or all queries
 - `ParallelRetriever.cpp`: sentinel filtering and global top-k merge
+- `BenchmarkMetrics.cpp`: run-summary metrics aggregation, speedup-row construction, and CSV writing
+- `CorrectnessChecker.cpp`: CSV-row validation, normalization, and per-query comparison logic
 - `MpiUtils.cpp`: MPI_Bcast/MPI_Gather wrappers and rank-metrics collection helpers
 - `main_sequential.cpp`: sequential CLI load, search, and CSV output path
 - `main_parallel.cpp`: MPI CLI load, shard-local search, gather, merge, and metrics output path
@@ -418,9 +522,11 @@ Small executable or script-based checks used by `CTest`.
 - `BinaryDatasetTest.cpp`: binary header validation, payload validation, and shard logic
 - `SequentialRetrieverTest.cpp`: retrieval ordering, top-k behavior, offset handling, and failure cases
 - `ParallelRetrieverTest.cpp`: global merge ordering and sentinel handling
-- `tests/cmake/*.cmake`: CLI smoke, determinism, sequential checks, and blocking MPI end-to-end checks
+- `BenchmarkMetricsTest.cpp`: run-summary metrics aggregation and speedup-row validation
+- `CorrectnessCheckerTest.cpp`: correctness comparison validation and failure cases
+- `tests/cmake/*.cmake`: CLI smoke, determinism, sequential checks, blocking MPI end-to-end checks, correctness-check workflow checks, and benchmark automation smoke checks
 
-Later phases may add retrieval correctness and benchmark-result checks here.
+Later phases may add real-text conversion checks, metadata-backed demo checks, and report-oriented validation here.
 
 ### `scripts/`
 
@@ -430,6 +536,15 @@ POSIX shell helpers intended to run inside Ubuntu WSL.
 - `configure_debug.sh`: configure the debug build tree
 - `configure_release.sh`: configure the release build tree
 - `run_smoke_tests.sh`: build and run the current repository smoke suite
+- `benchmark_common.sh`: shared benchmark environment/bootstrap helpers
+- `run_select_N.sh`: runtime-by-N selection stage
+- `run_correctness.sh`: correctness benchmark stage
+- `run_granularity.sh`: granularity/load-balancing benchmark stage
+- `run_speedup.sh`: speedup benchmark stage
+- `run_all_experiments.sh`: one-command synthetic benchmark orchestration
+- `benchmark_csv.py`: run-summary aggregation and manifest helpers
+- `plot_results.py`: headless benchmark figure generation
+- `requirements-benchmark.txt`: plotting dependency list for the benchmark venv
 
 ### `tools/`
 
@@ -438,6 +553,7 @@ Standalone helper binaries and utilities that are not part of the main retriever
 - `generate_vectors.cpp`: deterministic synthetic memory-vector generator
 - `generate_queries.cpp`: deterministic synthetic query-vector generator
 - `inspect_dataset.cpp`: read-only binary header inspection tool
+- `verify_results.cpp`: sequential-vs-parallel correctness-checking tool
 - `SyntheticGeneratorCommon.hpp`: shared tool-only generator and parser helpers
 
 ### `data/`
@@ -458,6 +574,15 @@ Canonical technical docs:
 - source guide
 - master project plan
 
+### `docs/usage/`
+
+Canonical operational usage docs:
+
+- WSL onboarding after clone
+- copy-paste retrieval workflows
+- benchmark script workflows
+- troubleshooting and safe generated-state cleanup
+
 ### `docs/plans/`
 
 Execution plans and planning artifacts tied to dated work items.
@@ -469,20 +594,23 @@ The current build introduces these targets:
 - `retriever_core`
 - `sequential_retriever`
 - `parallel_retriever`
+- `verify_results`
 - `config_logger_test`
+- `benchmark_metrics_test`
 - `generate_vectors`
 - `generate_queries`
 - `inspect_dataset`
 - `binary_dataset_test`
 - `sequential_retriever_test`
 - `parallel_retriever_test`
+- `correctness_checker_test`
 
 `retriever_core` is the shared internal layer. Later phases should prefer extending it instead of duplicating parsing or logging logic in individual binaries.
 
 ## Maintainability Rules
 
 1. Shared logic belongs in `retriever_core`, not duplicated in each `main`.
-2. New docs must use the refactored `docs/development` and `docs/plans` paths.
+2. New docs must use the refactored `docs/development`, `docs/usage`, and `docs/plans` paths.
 3. WSL-first commands should be the default in docs and scripts.
 4. Tool-only helpers should stay under `tools/` unless they become shared runtime code needed by retrievers and tests.
 

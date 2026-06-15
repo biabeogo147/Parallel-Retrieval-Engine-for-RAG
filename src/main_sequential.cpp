@@ -1,8 +1,10 @@
+#include "BenchmarkMetrics.hpp"
 #include "BinaryDataset.hpp"
 #include "Config.hpp"
 #include "Logger.hpp"
 #include "SequentialRetriever.hpp"
 
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -75,10 +77,25 @@ int main(int argc, const char* const argv[]) {
             std::to_string(query_dataset.header.num_vectors) +
             " query vectors.");
 
+        const auto retrieval_start = std::chrono::steady_clock::now();
         const auto retrieval_results =
             retriever::SequentialRetriever::search_all(memory_dataset, query_dataset, result.config.topk);
+        const auto retrieval_end = std::chrono::steady_clock::now();
+        const auto retrieval_seconds = std::chrono::duration<double>(retrieval_end - retrieval_start).count();
 
         write_results_csv(result.config.output_path, retrieval_results);
+
+        if (!result.config.run_metrics_path.empty()) {
+            retriever::write_run_metrics_csv(
+                result.config.run_metrics_path,
+                retriever::make_sequential_run_metrics(
+                    memory_dataset.header.num_vectors,
+                    memory_dataset.header.dimension,
+                    query_dataset.header.num_vectors,
+                    result.config.topk,
+                    retrieval_seconds,
+                    retrieval_seconds));
+        }
 
         logger.info(
             "Wrote sequential retrieval results to " +

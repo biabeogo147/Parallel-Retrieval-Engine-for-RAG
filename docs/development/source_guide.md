@@ -13,12 +13,12 @@ This file merges the former `source_code_walkthrough.md` and `source_file_refere
 
 ## Purpose
 
-This document explains how the current Phase 1, Phase 2, Phase 3, and Phase 4 code actually runs at source level.
+This document explains how the current Phase 1, Phase 2, Phase 3, Phase 4, Phase 5, Phase 6, and Phase 7 code actually runs at source level.
 
 It is written for two use cases:
 
 - understanding the runtime pipeline for a report or presentation
-- onboarding the next engineer before Phase 5 correctness tooling and benchmark orchestration are added
+- onboarding the next engineer before later real-text preprocessing and demo layers are added
 
 The codebase currently provides:
 
@@ -30,9 +30,13 @@ The codebase currently provides:
 - exact blocking MPI top-k retrieval over sharded memory vectors
 - canonical top-k CSV output for both retriever binaries
 - per-rank metrics CSV output for the parallel binary
+- sequential-vs-parallel correctness comparison over canonical top-k CSV files
+- one-run benchmark summary metrics for both retriever binaries
+- WSL-first benchmark automation scripts for runtime selection, correctness, granularity, and speedup studies
+- Python benchmark helpers for CSV aggregation and headless figure generation
 - smoke and validation tests
 
-The major work still deferred is correctness-tooling and benchmark automation around the working retrievers.
+The major work still deferred is real-text preprocessing, corpus conversion, metadata-backed demo retrieval, and report-oriented packaging around the working synthetic benchmark pipeline.
 
 ## Reading Order
 
@@ -58,11 +62,26 @@ If you want the fastest path to understanding, read the source in this order:
 18. `tools/generate_queries.cpp`
 19. `tools/SyntheticGeneratorCommon.hpp`
 20. `tools/inspect_dataset.cpp`
-21. `tests/SequentialRetrieverTest.cpp`
-22. `tests/ParallelRetrieverTest.cpp`
-23. `tests/BinaryDatasetTest.cpp`
-24. `tests/ConfigLoggerTest.cpp`
-25. `tests/cmake/*.cmake`
+21. `tools/verify_results.cpp`
+22. `include/CorrectnessChecker.hpp`
+23. `src/CorrectnessChecker.cpp`
+24. `include/BenchmarkMetrics.hpp`
+25. `src/BenchmarkMetrics.cpp`
+26. `scripts/benchmark_common.sh`
+27. `scripts/run_select_N.sh`
+28. `scripts/run_correctness.sh`
+29. `scripts/run_granularity.sh`
+30. `scripts/run_speedup.sh`
+31. `scripts/run_all_experiments.sh`
+32. `scripts/benchmark_csv.py`
+33. `scripts/plot_results.py`
+34. `tests/BenchmarkMetricsTest.cpp`
+35. `tests/CorrectnessCheckerTest.cpp`
+36. `tests/SequentialRetrieverTest.cpp`
+37. `tests/ParallelRetrieverTest.cpp`
+38. `tests/BinaryDatasetTest.cpp`
+39. `tests/ConfigLoggerTest.cpp`
+40. `tests/cmake/*.cmake`
 
 For a file-by-file reference, also read [source_file_reference.md](#source-file-reference).
 
@@ -72,19 +91,26 @@ For a file-by-file reference, also read [source_file_reference.md](#source-file-
 
 - `retriever_core`
   - shared internal library
-  - contains `BinaryDataset.cpp`, `Config.cpp`, `Logger.cpp`, `TopKHeap.cpp`, `SequentialRetriever.cpp`, and `ParallelRetriever.cpp`
+  - contains `BinaryDataset.cpp`, `BenchmarkMetrics.cpp`, `Config.cpp`, `CorrectnessChecker.cpp`, `Logger.cpp`, `TopKHeap.cpp`, `SequentialRetriever.cpp`, and `ParallelRetriever.cpp`
 - `sequential_retriever`
   - exact sequential CLI entrypoint
   - links against `retriever_core`
 - `parallel_retriever`
   - exact blocking MPI CLI entrypoint
   - links against `retriever_core`, `MpiUtils.cpp`, `MpiSession.cpp`, and `MPI::MPI_CXX`
+- `verify_results`
+  - correctness-check CLI entrypoint for comparing sequential and parallel top-k CSV outputs
+  - links against `retriever_core`
 - `generate_vectors`
   - synthetic memory-vector generator
 - `generate_queries`
   - synthetic query-vector generator
 - `inspect_dataset`
   - read-only binary header inspector
+- `correctness_checker_test`
+  - correctness comparison validation and failure-mode checks
+- `benchmark_metrics_test`
+  - run-summary metrics aggregation and speedup-row validation
 - `config_logger_test`
   - parser and usage-contract checks
 - `binary_dataset_test`
@@ -97,9 +123,12 @@ For a file-by-file reference, also read [source_file_reference.md](#source-file-
 The design intent is:
 
 - shared exact-search and merge logic lives in `retriever_core`
+- shared correctness-comparison semantics also live in `retriever_core`
+- shared benchmark-summary semantics also live in `retriever_core`
 - MPI lifecycle and collective transport stay in the parallel executable layer
 - generator-specific parsing and sampling stay in `tools/`
 - file I/O and CSV writing remain CLI-entrypoint responsibilities
+- benchmark orchestration and plotting live in WSL-first scripts rather than new C++ executables
 
 ## High-Level Architecture
 
@@ -109,11 +138,12 @@ flowchart TD
     C["parallel_retriever"] --> D["main_parallel.cpp"]
     E["generate_vectors / generate_queries"] --> F["tool mains"]
     G["inspect_dataset"] --> H["inspect_dataset.cpp"]
+    AA["verify_results"] --> AB["verify_results.cpp"]
 
     B --> I["Config::parse_config"]
     B --> J["BinaryDataset::read_all"]
     B --> K["SequentialRetriever::search_all"]
-    B --> L["write_results_csv"]
+    B --> L["write_results_csv / write_run_metrics_csv"]
 
     D --> M["MpiSession"]
     D --> I
@@ -124,11 +154,21 @@ flowchart TD
     D --> R["MpiUtils::gather_fixed_candidates"]
     D --> S["ParallelRetriever::merge_query_results"]
     D --> T["MpiUtils::gather_rank_metrics"]
-    D --> U["write_results_csv / write_metrics_csv"]
+    D --> U["write_results_csv / write_metrics_csv / write_run_metrics_csv"]
 
     F --> V["SyntheticGeneratorCommon"]
     F --> W["BinaryDataset::make_header / write"]
     H --> X["BinaryDataset::read_header"]
+    AB --> AC["read_topk_csv"]
+    AB --> AD["CorrectnessChecker::compare"]
+    AB --> AE["write_correctness_csv"]
+
+    AF["run_* benchmark scripts"] --> AG["benchmark_common.sh"]
+    AF --> AH["benchmark_csv.py"]
+    AF --> AI["plot_results.py"]
+    AG --> C
+    AG --> E
+    AG --> AA
 
     I --> Y["Logger"]
     M --> Z["MPI_Init / MPI_Finalize"]
@@ -153,8 +193,11 @@ flowchart TD
     I --> J["BinaryDataset::read_all(queries)"]
     J --> K["SequentialRetriever::search_all(...)"]
     K --> L["write_results_csv(...)"]
-    L --> M["log success"]
-    M --> N["exit 0"]
+    L --> M{"run_metrics_path?"}
+    M -- "yes" --> N["write_run_metrics_csv(...)"]
+    M -- "no" --> O["log success"]
+    N --> O
+    O --> P["exit 0"]
 ```
 
 ### What happens in detail
@@ -167,6 +210,7 @@ flowchart TD
    - loads memory/query payloads with `BinaryDataset::read_all(...)`
    - calls `SequentialRetriever::search_all(...)`
    - writes `query_id,rank_position,memory_id,score`
+   - optionally writes one `RunMetricsRow` CSV when `--run-metrics` is present
 5. Any runtime exception is caught at `main` boundary and printed as `Error: ...`.
 
 ## 2. `parallel_retriever`
@@ -200,7 +244,10 @@ flowchart TD
     V -- "no" --> W["gather_rank_metrics(...)"]
     W --> X["rank 0 write parallel_topk.csv"]
     X --> Y["rank 0 write metrics.csv"]
-    Y --> Z["exit 0"]
+    Y --> Z{"run_metrics_path?"}
+    Z -- "yes" --> AA["rank 0 write run-summary CSV"]
+    Z -- "no" --> AB["exit 0"]
+    AA --> AB
 ```
 
 ### What happens in detail
@@ -269,6 +316,7 @@ After the query loop:
 4. rank `0` writes:
    - `parallel_topk.csv`
    - `parallel_metrics.csv`
+   - optional one-row run-summary metrics CSV when `--run-metrics` is present
 
 ### Why the local-search core is reused
 
@@ -377,6 +425,111 @@ This binary mirrors `generate_vectors` but uses `--Q`.
 
 This binary remains the read-only metadata inspector for binary vector files.
 
+## 10. `verify_results`
+
+This binary is the Phase 5 correctness-checking entrypoint.
+
+### Control Flow
+
+```mermaid
+flowchart TD
+    A["process starts"] --> B["verify_results.cpp"]
+    B --> C["parse_args(...)"]
+    C --> D{"show_help?"}
+    D -- "yes" --> E["print usage to stdout"]
+    D -- "no" --> F["read_topk_csv(sequential)"]
+    F --> G["read_topk_csv(parallel)"]
+    G --> H["CorrectnessChecker::compare(...)"]
+    H --> I["write_correctness_csv(...)"]
+    I --> J{"all queries PASS?"}
+    J -- "yes" --> K["print 'All queries PASS'"]
+    J -- "no" --> L["print FAIL summary"]
+```
+
+### What it does
+
+1. parses:
+   - `--sequential`
+   - `--parallel`
+   - `--epsilon`
+   - `--output`
+   - optional `--help`
+2. rejects malformed CSV input before any comparison result is written
+3. validates and sorts rows through `CorrectnessChecker::compare(...)`
+4. writes one row per query to `correctness.csv`
+5. returns:
+   - `0` when all queries pass
+   - `1` when comparison completed but at least one query failed
+   - `2` for CLI, CSV, or runtime errors
+
+## 11. `BenchmarkMetrics`
+
+`BenchmarkMetrics` is the shared Phase 6 summary layer.
+
+### Purpose
+
+It converts one invocation of either retriever into a canonical one-row benchmark record that later scripts can aggregate without re-deriving timing semantics.
+
+### What it does
+
+- defines `RunMetricsRow`
+- defines `SpeedupRow`
+- constructs the sequential baseline row with:
+  - `P = 1`
+  - `communication_time = 0`
+- constructs the parallel summary row with:
+  - `compute_time = max(rank.compute_time)`
+  - `communication_time = max(rank.communication_time)`
+  - `total_time = global_total_time`
+- derives speedup and efficiency rows from one sequential baseline plus one parallel summary row
+- writes the exact header:
+  - `N,D,Q,k,P,compute_time,communication_time,total_time`
+
+### Why it lives in `retriever_core`
+
+These timing semantics are part of the benchmark contract now, not just shell-script glue. Keeping them in shared C++ code ensures:
+
+- both retriever binaries write the same schema
+- the sequential baseline uses the intended denominator for speedup
+- later benchmark scripts do not need to guess which timing fields are comparable
+
+## 12. Benchmark Automation Scripts
+
+Phase 7 keeps experiment orchestration in WSL-first scripts instead of adding a second benchmark executable layer.
+
+### What they do
+
+- `run_select_N.sh`
+  - sweeps candidate `N` values
+  - writes `runtime_by_N.csv`
+  - writes `benchmark_selection.env`
+- `run_correctness.sh`
+  - runs sequential retrieval, parallel retrieval, and `verify_results`
+  - writes the canonical correctness artifacts under `results/`
+- `run_granularity.sh`
+  - runs one canonical parallel job
+  - promotes its per-rank metrics CSV to `granularity.csv`
+  - writes a short idle-time summary
+- `run_speedup.sh`
+  - runs the sequential baseline plus multiple parallel `P` values
+  - writes `speedup.csv`
+- `run_all_experiments.sh`
+  - runs the full synthetic benchmark pipeline
+  - bootstraps plotting support
+  - generates PNG figures
+
+### Why the scripting layer matters
+
+This project now has a complete synthetic benchmark loop:
+
+1. choose `N`
+2. verify correctness
+3. inspect load balance
+4. measure speedup
+5. generate figures for reporting
+
+That workflow is now part of the maintained developer path, not an external ad hoc process.
+
 ## How Data Moves Through the Current Pipeline
 
 The working synthetic pipeline is now:
@@ -386,17 +539,30 @@ The working synthetic pipeline is now:
 3. `inspect_dataset` when needed
 4. `sequential_retriever`
 5. `parallel_retriever`
-6. compare or benchmark the resulting CSVs in later phases
+6. `verify_results`
+7. optional `--run-metrics` outputs from retrievers
+8. benchmark automation scripts and figure generation
 
 In more detail:
 
 1. synthetic tools generate normalized row-major `float32` binaries
-2. sequential mode loads full memory + query payloads and writes `sequential_topk.csv`
+2. sequential mode loads full memory + query payloads and writes:
+   - `sequential_topk.csv`
+   - optional sequential run-summary CSV
 3. parallel mode loads memory shards, broadcasts queries, gathers local top-k, merges them, and writes:
    - `parallel_topk.csv`
    - `parallel_metrics.csv`
+   - optional parallel run-summary CSV
+4. correctness mode reads `sequential_topk.csv` and `parallel_topk.csv`, compares aligned rank rows, and writes:
+   - `correctness.csv`
+5. benchmark scripts aggregate those outputs into:
+   - `runtime_by_N.csv`
+   - `granularity.csv`
+   - `speedup.csv`
+   - `benchmark_selection.env`
+   - `results/figures/*.png`
 
-At the end of Phase 4, both retriever binaries are real.
+At the end of Phase 7, the synthetic benchmark path is end-to-end executable.
 
 ## Tests as Executable Documentation
 
@@ -445,6 +611,29 @@ This test file documents the Phase 4 global-merge contract by checking:
 - sentinel candidates are ignored
 - merge still works when some ranks contribute no valid local results
 
+## `CorrectnessCheckerTest.cpp`
+
+This test file documents the Phase 5 correctness contract by checking:
+
+- exact-match pass behavior
+- `memory_id` mismatch failure
+- score-difference tolerance handling
+- multi-query sorting and grouping
+- duplicate rank rejection
+- non-contiguous rank rejection
+- query-set mismatch rejection
+
+## `BenchmarkMetricsTest.cpp`
+
+This test file documents the Phase 6 summary contract by checking:
+
+- sequential run rows use `P = 1` and `communication_time = 0`
+- parallel summaries use the maximum compute and communication times across ranks
+- parallel summaries preserve `global_total_time`
+- `SpeedupRow` math is correct for baseline and parallel rows
+- mismatched `N`, `D`, `Q`, or `k` is rejected
+- invalid baseline `P` and non-positive times are rejected
+
 ## CMake-driven smoke tests
 
 The `tests/cmake/*.cmake` scripts validate executable-level behavior:
@@ -459,16 +648,28 @@ The `tests/cmake/*.cmake` scripts validate executable-level behavior:
 - `parallel_retriever` writes the metrics CSV with the expected line count
 - `parallel_retriever` still succeeds when `world_size > N`
 - parallel dimension mismatch fails cleanly under `mpirun`
+- `verify_results` writes the expected correctness CSV on matching input
+- `verify_results` returns `1` and still writes output on logical mismatch
+- `verify_results` returns `2` on malformed CSV input
+- sequential `--run-metrics` writes the exact one-row summary schema
+- parallel `--run-metrics` writes the exact one-row summary schema
+- `run_select_N.sh` writes `runtime_by_N.csv` and `benchmark_selection.env`
+- `run_correctness.sh` writes the expected correctness artifacts
+- `run_granularity.sh` writes `granularity.csv` and a summary note
+- `run_speedup.sh` writes `speedup.csv` with a sequential `P = 1` baseline row
+- `run_all_experiments.sh` writes the final CSV set and all benchmark figures
 
-## Source Boundaries to Remember Before Phase 5
+## Source Boundaries to Remember After Phase 7
 
 - `parse_config` is only for retriever binaries
 - `BinaryDataset` owns file format and shard decomposition
 - `SequentialRetriever::search_local(...)` is the shared exact local-search kernel
 - `ParallelRetriever` owns global top-k merge semantics
+- `CorrectnessChecker` owns per-query top-k CSV comparison semantics
+- `BenchmarkMetrics` owns canonical run-summary and speedup-row semantics
 - `MpiUtils` owns blocking transport helpers and startup coordination
 - rank `0` is the only process that prints human-facing CLI text and writes CSV files in the MPI path
-- correctness comparison tooling is still a later-phase concern
+- benchmark orchestration lives in scripts, but timing semantics stay in shared C++ code
 
 ## Suggested Report Framing
 
@@ -491,6 +692,19 @@ If you need to explain the current source code in a report, this wording fits th
    - blocking broadcast and gather
    - deterministic global merge
    - per-rank metrics output
+5. Phase 5 added correctness tooling around the working retrievers:
+   - canonical sequential-vs-parallel CSV comparison
+   - explicit epsilon-based score tolerance
+   - per-query correctness reporting
+6. Phase 6 locked benchmark-summary metrics inside the codebase:
+   - canonical one-run summary rows
+   - stable timing boundaries for fair speedup comparisons
+   - shared speedup and efficiency calculations
+7. Phase 7 turned the synthetic benchmark workflow into a reproducible automation pipeline:
+   - runtime-by-`N` selection
+   - correctness gating
+   - granularity and load-balance reporting
+   - speedup tables and headless figures
 
 
 ---
@@ -499,7 +713,7 @@ If you need to explain the current source code in a report, this wording fits th
 
 ## Purpose
 
-This document explains the role of every current source and test file that matters to the Phase 1, Phase 2, Phase 3, and Phase 4 implementation.
+This document explains the role of every current source and test file that matters to the Phase 1 through Phase 7 implementation.
 
 Use [source_code_walkthrough.md](#source-code-walkthrough) for end-to-end flow.
 Use this file when you want to answer: "What exactly is this file responsible for?"
@@ -549,6 +763,18 @@ Use this file when you want to answer: "What exactly is this file responsible fo
 **Responsibility**
 
 - declares the Phase 4 global merge API and the per-rank metrics row type
+
+## `include/CorrectnessChecker.hpp`
+
+**Responsibility**
+
+- declares the Phase 5 top-k CSV row model and shared correctness-comparison API
+
+## `include/BenchmarkMetrics.hpp`
+
+**Responsibility**
+
+- declares the Phase 6 run-summary metrics rows, speedup rows, and shared writer API
 
 ## `include/MpiUtils.hpp`
 
@@ -600,6 +826,18 @@ Use this file when you want to answer: "What exactly is this file responsible fo
 
 - implements Phase 4 global merge over the gathered local candidates
 
+## `src/CorrectnessChecker.cpp`
+
+**Responsibility**
+
+- implements CSV-row normalization, per-query validation, and sequential-vs-parallel comparison
+
+## `src/BenchmarkMetrics.cpp`
+
+**Responsibility**
+
+- implements sequential and parallel run-summary construction, speedup-row construction, and summary CSV writing
+
 ## `src/MpiUtils.cpp`
 
 **Responsibility**
@@ -644,6 +882,12 @@ Use this file when you want to answer: "What exactly is this file responsible fo
 
 - executable entrypoint for read-only dataset inspection
 
+## `tools/verify_results.cpp`
+
+**Responsibility**
+
+- executable entrypoint for correctness comparison and `correctness.csv` output
+
 ## Test Files in `tests/`
 
 ## `tests/ConfigLoggerTest.cpp`
@@ -669,6 +913,18 @@ Use this file when you want to answer: "What exactly is this file responsible fo
 **Responsibility**
 
 - verifies deterministic global merge behavior directly
+
+## `tests/CorrectnessCheckerTest.cpp`
+
+**Responsibility**
+
+- verifies correctness comparison behavior directly
+
+## `tests/BenchmarkMetricsTest.cpp`
+
+**Responsibility**
+
+- verifies run-summary aggregation and speedup-row behavior directly
 
 ## `tests/cmake/GenerateAndInspectDataset.cmake`
 
@@ -712,6 +968,66 @@ Use this file when you want to answer: "What exactly is this file responsible fo
 
 - validates MPI dimension-mismatch failure behavior
 
+## `tests/cmake/RunVerifyResultsSmoke.cmake`
+
+**Responsibility**
+
+- validates a full sequential -> parallel -> correctness workflow on small input
+
+## `tests/cmake/RunVerifyResultsMismatchSmoke.cmake`
+
+**Responsibility**
+
+- validates mismatch detection and exit-code `1` behavior
+
+## `tests/cmake/RunVerifyResultsMalformedFail.cmake`
+
+**Responsibility**
+
+- validates malformed-input rejection and exit-code `2` behavior
+
+## `tests/cmake/RunSequentialRunMetricsSmoke.cmake`
+
+**Responsibility**
+
+- validates the sequential `--run-metrics` output contract end-to-end
+
+## `tests/cmake/RunParallelRunMetricsSmoke.cmake`
+
+**Responsibility**
+
+- validates the parallel `--run-metrics` and per-rank metrics output contracts end-to-end
+
+## `tests/cmake/RunBenchmarkSelectNSmoke.cmake`
+
+**Responsibility**
+
+- validates the runtime-by-`N` selection stage and manifest generation
+
+## `tests/cmake/RunBenchmarkCorrectnessSmoke.cmake`
+
+**Responsibility**
+
+- validates the benchmark correctness stage around sequential, parallel, and verify tooling
+
+## `tests/cmake/RunBenchmarkGranularitySmoke.cmake`
+
+**Responsibility**
+
+- validates the benchmark granularity stage and summary-note generation
+
+## `tests/cmake/RunBenchmarkSpeedupSmoke.cmake`
+
+**Responsibility**
+
+- validates the speedup stage and sequential-baseline row generation
+
+## `tests/cmake/RunBenchmarkAllExperimentsSmoke.cmake`
+
+**Responsibility**
+
+- validates the reduced-profile end-to-end benchmark automation and figure generation flow
+
 ## Build File
 
 ## `CMakeLists.txt`
@@ -736,6 +1052,12 @@ Use this file when you want to answer: "What exactly is this file responsible fo
 - parallel global merge core:
   - `include/ParallelRetriever.hpp`
   - `src/ParallelRetriever.cpp`
+- correctness comparison core:
+  - `include/CorrectnessChecker.hpp`
+  - `src/CorrectnessChecker.cpp`
+- benchmark summary core:
+  - `include/BenchmarkMetrics.hpp`
+  - `src/BenchmarkMetrics.cpp`
 - MPI helper layer:
   - `include/MpiUtils.hpp`
   - `src/MpiUtils.cpp`
@@ -754,19 +1076,32 @@ Use this file when you want to answer: "What exactly is this file responsible fo
   - `tools/generate_queries.cpp`
 - dataset inspection:
   - `tools/inspect_dataset.cpp`
+- correctness comparison tool:
+  - `tools/verify_results.cpp`
+- benchmark automation:
+  - `scripts/benchmark_common.sh`
+  - `scripts/run_select_N.sh`
+  - `scripts/run_correctness.sh`
+  - `scripts/run_granularity.sh`
+  - `scripts/run_speedup.sh`
+  - `scripts/run_all_experiments.sh`
+  - `scripts/benchmark_csv.py`
+  - `scripts/plot_results.py`
 - executable behavior checks:
   - `tests/ConfigLoggerTest.cpp`
   - `tests/BinaryDatasetTest.cpp`
+  - `tests/BenchmarkMetricsTest.cpp`
   - `tests/SequentialRetrieverTest.cpp`
   - `tests/ParallelRetrieverTest.cpp`
+  - `tests/CorrectnessCheckerTest.cpp`
   - `tests/cmake/*.cmake`
 
 ## Suggested Maintenance Rule
 
-When Phase 5 starts, update this document whenever one of these happens:
+Now that Phase 7 is in place, update this document whenever one of these happens:
 
 - a new executable is added
 - a header gains a new public type or function
 - a file changes responsibility
 - the runtime pipeline changes
-- correctness comparison or benchmark tooling becomes part of the canonical developer flow
+- the benchmark automation or figure-generation workflow changes

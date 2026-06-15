@@ -106,17 +106,41 @@ void test_parallel_valid_config() {
         "10",
         "--metrics",
         "metrics.csv",
+        "--run-metrics",
+        "run.csv",
         "--log-level",
         "debug",
     };
 
-    const auto result = retriever::parse_config(AppMode::Parallel, 13, argv);
+    const auto result = retriever::parse_config(AppMode::Parallel, 15, argv);
 
     expect_true(result.ok, "parallel config should parse");
     expect_true(!result.config.show_help, "help flag should be unset");
     expect_true(result.config.metrics_path == "metrics.csv", "metrics path should parse");
+    expect_true(result.config.run_metrics_path == "run.csv", "run metrics path should parse");
     expect_true(result.config.topk == 10, "topk should parse");
     expect_true(result.config.log_level == LogLevel::Debug, "debug log level should parse");
+}
+
+void test_sequential_accepts_run_metrics() {
+    const char* argv[] = {
+        "sequential_retriever",
+        "--vectors",
+        "vectors.bin",
+        "--queries",
+        "queries.bin",
+        "--output",
+        "out.csv",
+        "--topk",
+        "10",
+        "--run-metrics",
+        "run.csv",
+    };
+
+    const auto result = retriever::parse_config(AppMode::Sequential, 11, argv);
+
+    expect_true(result.ok, "sequential config with run metrics should parse");
+    expect_true(result.config.run_metrics_path == "run.csv", "run metrics path should parse");
 }
 
 void test_usage_text() {
@@ -125,7 +149,9 @@ void test_usage_text() {
 
     expect_true(sequential_usage.find("Usage: sequential_retriever") != std::string::npos, "sequential usage should contain binary name");
     expect_true(parallel_usage.find("Usage: parallel_retriever") != std::string::npos, "parallel usage should contain binary name");
+    expect_true(sequential_usage.find("--run-metrics <path>") != std::string::npos, "sequential usage should document run metrics");
     expect_true(parallel_usage.find("--metrics <path>") != std::string::npos, "parallel usage should document metrics");
+    expect_true(parallel_usage.find("--run-metrics <path>") != std::string::npos, "parallel usage should document run metrics");
     expect_true(
         parallel_usage.find("blocking MPI retrieval") != std::string::npos,
         "parallel usage should describe the Phase 4 retrieval path");
@@ -140,6 +166,7 @@ int main() {
     test_invalid_log_level();
     test_parallel_requires_metrics();
     test_parallel_valid_config();
+    test_sequential_accepts_run_metrics();
     test_usage_text();
     return 0;
 }

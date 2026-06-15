@@ -1,3 +1,4 @@
+#include "BenchmarkMetrics.hpp"
 #include "BinaryDataset.hpp"
 #include "Config.hpp"
 #include "Logger.hpp"
@@ -282,6 +283,17 @@ int main(int argc, char** argv) {
         if (mpi_session.rank() == 0) {
             write_results_csv(result.config.output_path, global_results);
             write_metrics_csv(result.config.metrics_path, metrics);
+            if (!result.config.run_metrics_path.empty()) {
+                retriever::write_run_metrics_csv(
+                    result.config.run_metrics_path,
+                    retriever::make_parallel_run_metrics(
+                        memory_shard.header.num_vectors,
+                        memory_shard.header.dimension,
+                        query_header.num_vectors,
+                        result.config.topk,
+                        mpi_session.size(),
+                        metrics));
+            }
             logger.info(
                 "Wrote parallel retrieval results to " +
                 result.config.output_path +

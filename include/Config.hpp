@@ -17,6 +17,7 @@ struct Config {
     std::string queries_path;
     std::string output_path;
     std::string metrics_path;
+    std::string run_metrics_path;
     int topk = 0;
     LogLevel log_level = LogLevel::Info;
 };

@@ -12,7 +12,9 @@ find_package(MPI REQUIRED)
 add_library(
     retriever_core
     src/BinaryDataset.cpp
+    src/BenchmarkMetrics.cpp
     src/Config.cpp
+    src/CorrectnessChecker.cpp
     src/Logger.cpp
     src/ParallelRetriever.cpp
     src/SequentialRetriever.cpp
@@ -93,15 +95,39 @@ add_executable(
 
 target_link_libraries(parallel_retriever_test PRIVATE retriever_core)
 
+add_executable(
+    correctness_checker_test
+    tests/CorrectnessCheckerTest.cpp
+)
+
+target_link_libraries(correctness_checker_test PRIVATE retriever_core)
+
+add_executable(
+    benchmark_metrics_test
+    tests/BenchmarkMetricsTest.cpp
+)
+
+target_link_libraries(benchmark_metrics_test PRIVATE retriever_core)
+
+add_executable(
+    verify_results
+    tools/verify_results.cpp
+)
+
+target_link_libraries(verify_results PRIVATE retriever_core)
+
 if(BUILD_TESTING)
     add_test(NAME config_logger_test COMMAND config_logger_test)
     add_test(NAME binary_dataset_test COMMAND binary_dataset_test)
     add_test(NAME sequential_retriever_test COMMAND sequential_retriever_test)
     add_test(NAME parallel_retriever_test COMMAND parallel_retriever_test)
+    add_test(NAME correctness_checker_test COMMAND correctness_checker_test)
+    add_test(NAME benchmark_metrics_test COMMAND benchmark_metrics_test)
     add_test(NAME sequential_help COMMAND sequential_retriever --help)
     add_test(NAME generate_vectors_help COMMAND generate_vectors --help)
     add_test(NAME generate_queries_help COMMAND generate_queries --help)
     add_test(NAME inspect_dataset_help COMMAND inspect_dataset --help)
+    add_test(NAME verify_results_help COMMAND verify_results --help)
     add_test(
         NAME sequential_unknown_flag
         COMMAND sequential_retriever --bogus
@@ -230,5 +256,112 @@ if(BUILD_TESTING)
             -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/phase4_parallel_dimension_mismatch
             -P
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/RunParallelDimensionMismatchFail.cmake
+    )
+    add_test(
+        NAME verify_results_smoke
+        COMMAND
+            ${CMAKE_COMMAND}
+            -DGENERATE_VECTORS=$<TARGET_FILE:generate_vectors>
+            -DGENERATE_QUERIES=$<TARGET_FILE:generate_queries>
+            -DSEQUENTIAL=$<TARGET_FILE:sequential_retriever>
+            -DPARALLEL=$<TARGET_FILE:parallel_retriever>
+            -DVERIFY_RESULTS=$<TARGET_FILE:verify_results>
+            -DMPIEXEC_EXECUTABLE=${MPIEXEC_EXECUTABLE}
+            -DMPIEXEC_NUMPROC_FLAG=${MPIEXEC_NUMPROC_FLAG}
+            -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/phase5_verify_results_smoke
+            -P
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/RunVerifyResultsSmoke.cmake
+    )
+    add_test(
+        NAME verify_results_mismatch_smoke
+        COMMAND
+            ${CMAKE_COMMAND}
+            -DVERIFY_RESULTS=$<TARGET_FILE:verify_results>
+            -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/phase5_verify_results_mismatch
+            -P
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/RunVerifyResultsMismatchSmoke.cmake
+    )
+    add_test(
+        NAME verify_results_malformed_input_fails
+        COMMAND
+            ${CMAKE_COMMAND}
+            -DVERIFY_RESULTS=$<TARGET_FILE:verify_results>
+            -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/phase5_verify_results_malformed
+            -P
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/RunVerifyResultsMalformedFail.cmake
+    )
+    add_test(
+        NAME sequential_run_metrics_smoke
+        COMMAND
+            ${CMAKE_COMMAND}
+            -DGENERATE_VECTORS=$<TARGET_FILE:generate_vectors>
+            -DGENERATE_QUERIES=$<TARGET_FILE:generate_queries>
+            -DSEQUENTIAL=$<TARGET_FILE:sequential_retriever>
+            -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/phase6_sequential_run_metrics
+            -P
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/RunSequentialRunMetricsSmoke.cmake
+    )
+    add_test(
+        NAME parallel_run_metrics_smoke
+        COMMAND
+            ${CMAKE_COMMAND}
+            -DGENERATE_VECTORS=$<TARGET_FILE:generate_vectors>
+            -DGENERATE_QUERIES=$<TARGET_FILE:generate_queries>
+            -DPARALLEL=$<TARGET_FILE:parallel_retriever>
+            -DMPIEXEC_EXECUTABLE=${MPIEXEC_EXECUTABLE}
+            -DMPIEXEC_NUMPROC_FLAG=${MPIEXEC_NUMPROC_FLAG}
+            -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/phase6_parallel_run_metrics
+            -P
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/RunParallelRunMetricsSmoke.cmake
+    )
+    add_test(
+        NAME benchmark_select_n_smoke
+        COMMAND
+            ${CMAKE_COMMAND}
+            -DREPO_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -DBUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}
+            -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/phase7_select_n_smoke
+            -P
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/RunBenchmarkSelectNSmoke.cmake
+    )
+    add_test(
+        NAME benchmark_correctness_script_smoke
+        COMMAND
+            ${CMAKE_COMMAND}
+            -DREPO_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -DBUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}
+            -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/phase7_correctness_smoke
+            -P
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/RunBenchmarkCorrectnessSmoke.cmake
+    )
+    add_test(
+        NAME benchmark_granularity_script_smoke
+        COMMAND
+            ${CMAKE_COMMAND}
+            -DREPO_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -DBUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}
+            -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/phase7_granularity_smoke
+            -P
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/RunBenchmarkGranularitySmoke.cmake
+    )
+    add_test(
+        NAME benchmark_speedup_script_smoke
+        COMMAND
+            ${CMAKE_COMMAND}
+            -DREPO_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -DBUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}
+            -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/phase7_speedup_smoke
+            -P
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/RunBenchmarkSpeedupSmoke.cmake
+    )
+    add_test(
+        NAME benchmark_all_experiments_smoke
+        COMMAND
+            ${CMAKE_COMMAND}
+            -DREPO_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -DBUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}
+            -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/phase7_all_experiments_smoke
+            -P
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/RunBenchmarkAllExperimentsSmoke.cmake
     )
 endif()

@@ -38,7 +38,7 @@ The repository currently provides:
 - a WSL-first C++17 and OpenMPI development foundation
 - retriever CLI scaffolding
 - a deterministic synthetic dataset generator and binary dataset loader
-- source-level and developer-facing documentation
+- source-level, developer-facing, and operational usage documentation
 
 The repository is phase-based. Work must stay aligned with the current phase plan and approved next-phase direction.
 
@@ -57,9 +57,20 @@ Before making non-trivial changes, contributors must read the current canonical 
 
 If a task touches only one narrow area, contributors may read deeper in that area after finishing this baseline reading order.
 
+If a task affects fresh-clone onboarding, copy-paste command workflows, or troubleshooting for day-to-day repo usage, contributors must also read:
+
+- `docs/usage/README.md`
+- the relevant file(s) under `docs/usage/`
+
 ## Canonical Document Roles
 
 The repository has one canonical document per major concern. Do not create a second source of truth for the same topic.
+
+- `docs/usage/`
+  - fresh-clone onboarding
+  - copy-paste operational workflows
+  - benchmark script usage
+  - troubleshooting and generated-state cleanup
 
 - `docs/development/project_specification.md`
   - project scope
@@ -72,10 +83,10 @@ The repository has one canonical document per major concern. Do not create a sec
   - binary dataset contract
   - benchmark policy
 - `docs/development/developer_guide.md`
-  - WSL environment setup
-  - build and test workflow
+  - technical WSL environment reference
+  - deeper build and test workflow rationale
   - codebase layout
-  - developer-facing operational guidance
+  - developer-facing maintenance guidance
 - `docs/development/source_guide.md`
   - runtime walkthrough
   - source file responsibilities
@@ -122,6 +133,7 @@ A contributor must update the relevant development document before or during imp
 
 Typical mapping:
 
+- fresh-clone onboarding, command-first usage flows, troubleshooting -> `docs/usage/`
 - scope or algorithm change -> `project_specification.md`
 - dataset, binary format, benchmark, generator behavior -> `data_pipeline_and_benchmarks.md`
 - environment, scripts, layout, build or test flow -> `developer_guide.md`
@@ -211,6 +223,8 @@ The repository must keep these boundaries clear:
   - POSIX shell workflow helpers
 - `docs/development/`
   - canonical technical references
+- `docs/usage/`
+  - canonical operational how-to docs
 - `docs/plans/`
   - dated implementation and planning records
 
@@ -235,9 +249,10 @@ Do not create a new Markdown file for a topic that already has a canonical home.
 
 Before creating a doc, contributors must ask:
 
-1. Does this topic already belong in one of the four canonical development guides?
-2. Is this a dated execution artifact that belongs in `docs/plans/` instead?
-3. Is a new file truly necessary, or should an existing canonical file be extended?
+1. Does this topic belong in `docs/usage/` as a user-facing operational guide?
+2. Does this topic already belong in one of the canonical development guides?
+3. Is this a dated execution artifact that belongs in `docs/plans/` instead?
+4. Is a new file truly necessary, or should an existing canonical file be extended?
 
 If the answer is not clearly "new canonical area", do not create a new file.
 

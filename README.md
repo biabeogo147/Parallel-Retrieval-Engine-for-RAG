@@ -10,6 +10,9 @@ The current implementation covers:
 - Phase 2 synthetic dataset work: deterministic normalized `float32` dataset generation, binary dataset loading, shard-aware reads, and a dataset inspection tool
 - Phase 3 retrieval work: exact sequential top-k retrieval, deterministic tie-breaking, and canonical CSV output
 - Phase 4 retrieval work: exact blocking MPI top-k retrieval, shard-local search reuse, and per-rank metrics CSV output
+- Phase 5 correctness work: sequential-vs-parallel CSV comparison, canonical correctness CSV output, and verification-oriented smoke coverage
+- Phase 6 benchmark-summary work: canonical one-run metrics rows for sequential and parallel retrieval
+- Phase 7 automation work: WSL-first synthetic benchmark scripts, speedup/runtime aggregation, and figure generation
 
 ## Canonical Development Environment
 
@@ -43,6 +46,7 @@ After Ubuntu is available, work inside WSL from the canonical repo path.
 |-- results/
 |-- docs/
 |   |-- development/
+|   |-- usage/
 |   `-- plans/
 `-- build/
     |-- debug/
@@ -53,9 +57,13 @@ For a folder-by-folder explanation, see:
 
 - `docs/development/developer_guide.md`
 
+For copy-paste operational docs after `git clone`, start with:
+
+- `docs/usage/README.md`
+
 ## Quickstart in WSL
 
-Clone or move the repo into the canonical location:
+Clone the repo into the canonical location:
 
 ```bash
 mkdir -p ~/work
@@ -64,81 +72,54 @@ git clone <your-remote-url> Parallel-Retrieval-Engine-for-RAG
 cd Parallel-Retrieval-Engine-for-RAG
 ```
 
-Install the development toolchain inside Ubuntu:
+Install the development toolchain, configure a debug build, and run the repository smoke wrapper:
 
 ```bash
 ./scripts/setup_wsl_dev_env.sh
-```
-
-Configure and build a debug tree:
-
-```bash
 ./scripts/configure_debug.sh
 cmake --build build/debug
 ctest --test-dir build/debug --output-on-failure
-```
-
-Smoke-check the CLI entrypoints:
-
-```bash
-./build/debug/sequential_retriever --help
-mpirun -np 4 ./build/debug/parallel_retriever --help
-```
-
-Generate, inspect, and search synthetic datasets:
-
-```bash
-./build/debug/generate_vectors --N 100000 --D 384 --output data/memory_vectors.bin
-./build/debug/generate_queries --Q 100 --D 384 --output data/query_vectors.bin
-./build/debug/inspect_dataset --input data/memory_vectors.bin
-./build/debug/sequential_retriever \
-  --vectors data/memory_vectors.bin \
-  --queries data/query_vectors.bin \
-  --topk 10 \
-  --output results/sequential_topk.csv
-mpirun -np 4 ./build/debug/parallel_retriever \
-  --vectors data/memory_vectors.bin \
-  --queries data/query_vectors.bin \
-  --topk 10 \
-  --output results/parallel_topk.csv \
-  --metrics results/parallel_metrics.csv
-```
-
-If your Ubuntu distro is still running as `root` during initial setup, OpenMPI blocks `mpirun` by default. In that temporary case, either finish the normal Ubuntu user setup or run:
-
-```bash
-OMPI_ALLOW_RUN_AS_ROOT=1 OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1 \
-  mpirun -np 4 ./build/debug/parallel_retriever --help
-```
-
-Or run the combined smoke script:
-
-```bash
 ./scripts/run_smoke_tests.sh
 ```
+
+This is the compact onboarding path. For the full command-first workflow set, use:
+
+- `docs/usage/getting-started-wsl.md`
+- `docs/usage/retrieval-workflows.md`
+- `docs/usage/benchmark-workflows.md`
+- `docs/usage/troubleshooting.md`
 
 ## Current Phase Status
 
 Implemented now:
 
-- `retriever_core` shared internal code for config parsing, logging, and binary dataset IO
+- `retriever_core` shared internal code for config parsing, logging, binary dataset IO, correctness comparison, and benchmark summary metrics
 - `TopKHeap`, `SequentialRetriever`, and `ParallelRetriever` reusable retrieval core
+- `CorrectnessChecker` reusable top-k CSV comparison core
+- `BenchmarkMetrics` reusable one-run metrics and speedup row helper layer
 - `sequential_retriever` exact sequential search path from binary input to CSV output
 - `parallel_retriever` exact blocking MPI retrieval path from sharded input to global CSV output
+- `verify_results` correctness-checking path from two top-k CSV inputs to `correctness.csv`
 - per-rank metrics CSV output for the parallel binary
+- optional `--run-metrics` output for sequential and parallel benchmark summaries
 - `generate_vectors`, `generate_queries`, and `inspect_dataset`
-- `CTest` coverage for parser behavior, dataset IO, deterministic generator smoke checks, sequential retrieval checks, and blocking MPI smoke checks
+- benchmark automation scripts for runtime-by-N selection, correctness, granularity, speedup, and all-in-one experiment runs
+- `CTest` coverage for parser behavior, dataset IO, deterministic generator smoke checks, sequential retrieval checks, blocking MPI smoke checks, correctness-check workflow checks, and benchmark automation smoke runs
 - WSL helper scripts and onboarding docs
 
 Still deferred to later phases:
 
-- sequential-vs-parallel correctness checking
-- runtime, granularity, and speedup experiments
 - real-text preprocessing and corpus conversion
+- metadata-backed demo retrieval and report packaging
 
 ## Documentation Index
 
 - `AGENTS.md`
+- `docs/usage/README.md`
+- `docs/usage/getting-started-wsl.md`
+- `docs/usage/retrieval-workflows.md`
+- `docs/usage/benchmark-workflows.md`
+- `docs/usage/troubleshooting.md`
 - `docs/development/project_specification.md`
 - `docs/development/data_pipeline_and_benchmarks.md`
 - `docs/development/developer_guide.md`
@@ -149,3 +130,7 @@ Still deferred to later phases:
 - `docs/plans/2026-06-15-phase-2-dataset-generator-loader.md`
 - `docs/plans/2026-06-15-phase-3-sequential-exact-retrieval.md`
 - `docs/plans/2026-06-15-phase-4-blocking-mpi-parallel-retrieval.md`
+- `docs/plans/2026-06-15-phase-5-correctness-checker.md`
+- `docs/plans/2026-06-15-phase-6-benchmark-run-metrics.md`
+- `docs/plans/2026-06-15-phase-7-experiment-automation.md`
+- `docs/plans/2026-06-15-usage-onboarding-docs.md`
