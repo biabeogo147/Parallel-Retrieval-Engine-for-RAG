@@ -3,6 +3,8 @@
 .cache/
 .venv/
 build/
+cmake*
+
 data/*
 !data/.gitkeep
 results/*
