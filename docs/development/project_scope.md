@@ -128,15 +128,15 @@ Results must be sorted by:
 
 Phase 0 is complete when all of the following are true:
 
-1. `docs/project_scope.md` defines the project boundary and fixed decisions.
-2. `docs/algorithm_design.md` defines the first algorithm and data contracts.
-3. `docs/benchmark_data.md` explains which datasets are used and why.
-4. `docs/environment_setup.md` defines the WSL2 and OpenMPI environment.
+1. `docs/development/project_scope.md` defines the project boundary and fixed decisions.
+2. `docs/development/algorithm_design.md` defines the first algorithm and data contracts.
+3. `docs/development/benchmark_data.md` explains which datasets are used and why.
+4. `docs/development/environment_setup.md` defines the WSL2 and OpenMPI environment.
 5. No remaining ambiguity exists around `D`, `k`, `Q`, binary format, or benchmark outputs.
 
 ## Related Documents
 
-- `docs/algorithm_design.md`
-- `docs/benchmark_data.md`
-- `docs/environment_setup.md`
+- `docs/development/algorithm_design.md`
+- `docs/development/benchmark_data.md`
+- `docs/development/environment_setup.md`
 - `docs/development/parallel_agent_memory_retriever_plan.md`

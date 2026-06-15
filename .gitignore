@@ -1,1 +1,9 @@
-.idea
+.idea/
+.tmp_pydeps/
+.cache/
+.venv/
+build/
+data/*
+!data/.gitkeep
+results/*
+!results/.gitkeep

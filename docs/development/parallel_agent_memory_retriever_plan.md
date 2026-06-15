@@ -800,10 +800,13 @@ parallel-agent-memory-retriever/
 ├── CMakeLists.txt
 ├── README.md
 ├── docs/
-│   ├── project_scope.md
-│   ├── algorithm_design.md
-│   ├── experiment_plan.md
-│   └── report_outline.md
+│   ├── development/
+│   │   ├── project_scope.md
+│   │   ├── algorithm_design.md
+│   │   ├── benchmark_data.md
+│   │   ├── environment_setup.md
+│   │   └── parallel_agent_memory_retriever_plan.md
+│   └── plans/
 ├── include/
 │   ├── Config.hpp
 │   ├── MemoryRecord.hpp
@@ -984,8 +987,8 @@ Nhiệm vụ:
 ### Deliverables
 
 ```text
-docs/project_scope.md
-docs/algorithm_design.md
+docs/development/project_scope.md
+docs/development/algorithm_design.md
 ```
 
 ### Acceptance criteria

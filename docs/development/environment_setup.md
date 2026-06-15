@@ -1,68 +1,82 @@
 # Environment Setup
 
-## Chosen Development Environment
+## Canonical Phase 1 Environment
 
-The project will target:
+Phase 1 standardizes on:
 
 - WSL2
-- Ubuntu LTS inside WSL2
+- Ubuntu 24.04 LTS
 - OpenMPI
 - CMake
 - Ninja
-- GCC or Clang through `mpicxx`
+- `mpicxx` as the C++ compiler entrypoint
 
-This replaces native Windows MPI as the primary path.
+This project no longer treats native Windows MPI as the primary workflow.
 
-## Why WSL2 and OpenMPI
+## Step 0: Install Ubuntu on Windows
 
-1. The Linux MPI toolchain is easier to install and document.
-2. Most parallel-computing examples and debugging workflows assume Linux.
-3. CMake plus OpenMPI is simpler than maintaining Windows-only MPI setup notes.
-4. The benchmark scripts will be easier to reproduce in reports and demos.
+Run this in PowerShell on the Windows host:
 
-## Recommended Layout
+```powershell
+wsl --install -d Ubuntu-24.04
+```
 
-### Preferred
+If Windows requests a reboot, restart first and then complete the Ubuntu initial user setup.
 
-Keep the active build and run environment inside the WSL filesystem, for example:
+Useful checks on the Windows side:
+
+```powershell
+wsl --status
+wsl -l -v
+```
+
+Expected result:
+
+1. Default WSL version is `2`.
+2. `Ubuntu-24.04` appears as an installed distro.
+3. The distro has completed first-run setup with a normal Linux user, not only the temporary `root` shell.
+
+## Step 1: Use the Canonical WSL Repo Location
+
+Preferred working tree:
 
 ```text
 ~/work/Parallel-Retrieval-Engine-for-RAG
 ```
 
-### Acceptable Fallback
-
-Use the existing Windows workspace through the mounted path:
+Fallback path if you temporarily work from the Windows mount:
 
 ```text
 /mnt/d/DS-AI/Parallel-Retrieval-Engine-for-RAG
 ```
 
-The fallback is fine for this project, but native WSL storage usually performs better for builds and heavy filesystem operations.
+Phase 1 docs and scripts assume the preferred WSL-native path.
 
-## Required Packages
+## Step 2: Install the Toolchain Inside Ubuntu
 
-Run inside WSL:
+From the repository root in WSL:
 
 ```bash
-sudo apt update
-sudo apt install -y \
-  build-essential \
-  cmake \
-  ninja-build \
-  pkg-config \
-  openmpi-bin \
-  libopenmpi-dev \
-  gdb \
-  valgrind \
-  python3 \
-  python3-pip \
-  python3-venv
+./scripts/setup_wsl_dev_env.sh
 ```
 
-## Verification Commands
+That script installs:
 
-After installation, confirm the toolchain:
+- `build-essential`
+- `cmake`
+- `ninja-build`
+- `pkg-config`
+- `openmpi-bin`
+- `libopenmpi-dev`
+- `gdb`
+- `valgrind`
+- `python3`
+- `python3-pip`
+- `python3-venv`
+
+## Step 3: Verify the Toolchain
+
+After setup, these commands must work inside WSL:
 
 ```bash
 mpicxx --version
@@ -77,59 +91,79 @@ Expected result:
 2. `mpirun` reports an OpenMPI version.
 3. `cmake` and `ninja` are available on `PATH`.
 
+## Step 4: Configure and Build
+
+Debug build:
+
+```bash
+./scripts/configure_debug.sh
+cmake --build build/debug
+```
+
+Release build:
+
+```bash
+./scripts/configure_release.sh
+cmake --build build/release
+```
+
+## Step 5: Run Phase 1 Smoke Checks
+
+```bash
+ctest --test-dir build/debug --output-on-failure
+./build/debug/sequential_retriever --help
+mpirun -np 4 ./build/debug/parallel_retriever --help
+```
+
+Or run the wrapper script:
+
+```bash
+./scripts/run_smoke_tests.sh
+```
+
+If you are still inside a temporary `root` login, OpenMPI blocks `mpirun` unless you explicitly allow it. For one-off verification only:
+
+```bash
+OMPI_ALLOW_RUN_AS_ROOT=1 OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1 \
+  mpirun -np 4 ./build/debug/parallel_retriever --help
+```
+
+The preferred fix is to complete Ubuntu's normal user setup and work as that user afterward.
+
 ## Dataset Mounts
 
-The benchmark data already exists on the Windows host at:
+The host dataset root is:
 
 ```text
 E:\data
 ```
 
-From WSL, use:
+Inside WSL, use:
 
 ```text
 /mnt/e/data
 ```
 
-Recommended dataset references for the first project wave:
+Phase 1 documents these dataset paths as canonical references:
 
 - `/mnt/e/data/ms_marco`
 - `/mnt/e/data/squad`
 - `/mnt/e/data/UIT-ViQuAD2.0`
 
-## Future Build Commands
-
-These commands are not part of Phase 0 execution yet, but they define the expected build shape:
-
-```bash
-cmake -S . -B build -G Ninja \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_CXX_COMPILER=mpicxx
-
-cmake --build build
-```
-
-## Expected Run Shape
-
-Once Phase 1 is complete, the minimum acceptance check should look like:
-
-```bash
-mpirun -np 4 ./build/parallel_retriever --help
-```
-
 ## IDE Guidance
 
 If you use CLion or VS Code:
 
-1. Point the toolchain to WSL, not native Windows.
-2. Build with the WSL compiler and MPI runtime.
-3. Keep launch configurations using `mpirun`.
+1. Configure the toolchain to use WSL, not the native Windows compiler.
+2. Point builds at `~/work/Parallel-Retrieval-Engine-for-RAG`.
+3. Use `mpicxx` and `mpirun` inside the WSL environment.
+4. Keep generated artifacts under `build/debug` and `build/release`.
 
-## Phase 0 Environment Exit Criteria
+## Phase 1 Environment Exit Criteria
 
-The environment decision is considered locked when:
+The environment setup is considered ready when:
 
-1. WSL2 is the documented primary runtime.
-2. OpenMPI is the documented MPI stack.
-3. `/mnt/e/data` is documented as the benchmark dataset root.
-4. The team no longer plans around native Windows `mpiexec` as the default.
+1. `Ubuntu-24.04` is installed under WSL2.
+2. The repo is available from the canonical WSL path.
+3. OpenMPI, CMake, and Ninja are installed inside Ubuntu.
+4. The Phase 1 configure, build, and smoke commands run in WSL.
