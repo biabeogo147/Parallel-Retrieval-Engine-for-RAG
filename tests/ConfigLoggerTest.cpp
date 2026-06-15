@@ -126,6 +126,9 @@ void test_usage_text() {
     expect_true(sequential_usage.find("Usage: sequential_retriever") != std::string::npos, "sequential usage should contain binary name");
     expect_true(parallel_usage.find("Usage: parallel_retriever") != std::string::npos, "parallel usage should contain binary name");
     expect_true(parallel_usage.find("--metrics <path>") != std::string::npos, "parallel usage should document metrics");
+    expect_true(
+        parallel_usage.find("blocking MPI retrieval") != std::string::npos,
+        "parallel usage should describe the Phase 4 retrieval path");
 }
 
 }  // namespace

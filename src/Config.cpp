@@ -170,7 +170,7 @@ std::string usage_text(const AppMode mode) {
     if (mode == AppMode::Sequential) {
         usage << "Phase 3 exact sequential retrieval over normalized row-major binary datasets.\n\n";
     } else {
-        usage << "Parallel retrieval scaffold: CLI parsing, logging, and MPI bootstrap only.\n\n";
+        usage << "Phase 4 exact blocking MPI retrieval over normalized row-major binary datasets.\n\n";
     }
     usage << "Options:\n";
     usage << "  --help                 Show this help message and exit.\n";

@@ -9,6 +9,7 @@ The current implementation covers:
 - Phase 1 foundation work: project layout, CLI contracts, MPI bootstrap, smoke-test coverage, and developer documentation
 - Phase 2 synthetic dataset work: deterministic normalized `float32` dataset generation, binary dataset loading, shard-aware reads, and a dataset inspection tool
 - Phase 3 retrieval work: exact sequential top-k retrieval, deterministic tie-breaking, and canonical CSV output
+- Phase 4 retrieval work: exact blocking MPI top-k retrieval, shard-local search reuse, and per-rank metrics CSV output
 
 ## Canonical Development Environment
 
@@ -95,6 +96,12 @@ Generate, inspect, and search synthetic datasets:
   --queries data/query_vectors.bin \
   --topk 10 \
   --output results/sequential_topk.csv
+mpirun -np 4 ./build/debug/parallel_retriever \
+  --vectors data/memory_vectors.bin \
+  --queries data/query_vectors.bin \
+  --topk 10 \
+  --output results/parallel_topk.csv \
+  --metrics results/parallel_metrics.csv
 ```
 
 If your Ubuntu distro is still running as `root` during initial setup, OpenMPI blocks `mpirun` by default. In that temporary case, either finish the normal Ubuntu user setup or run:
@@ -115,16 +122,16 @@ Or run the combined smoke script:
 Implemented now:
 
 - `retriever_core` shared internal code for config parsing, logging, and binary dataset IO
-- `TopKHeap` and `SequentialRetriever` reusable retrieval core
+- `TopKHeap`, `SequentialRetriever`, and `ParallelRetriever` reusable retrieval core
 - `sequential_retriever` exact sequential search path from binary input to CSV output
-- `parallel_retriever` MPI scaffold
+- `parallel_retriever` exact blocking MPI retrieval path from sharded input to global CSV output
+- per-rank metrics CSV output for the parallel binary
 - `generate_vectors`, `generate_queries`, and `inspect_dataset`
-- `CTest` coverage for parser behavior, dataset IO, deterministic generator smoke checks, and sequential retrieval correctness/smoke checks
+- `CTest` coverage for parser behavior, dataset IO, deterministic generator smoke checks, sequential retrieval checks, and blocking MPI smoke checks
 - WSL helper scripts and onboarding docs
 
 Still deferred to later phases:
 
-- parallel retrieval logic
 - sequential-vs-parallel correctness checking
 - runtime, granularity, and speedup experiments
 - real-text preprocessing and corpus conversion
@@ -141,3 +148,4 @@ Still deferred to later phases:
 - `docs/plans/2026-06-15-phase-1-foundation.md`
 - `docs/plans/2026-06-15-phase-2-dataset-generator-loader.md`
 - `docs/plans/2026-06-15-phase-3-sequential-exact-retrieval.md`
+- `docs/plans/2026-06-15-phase-4-blocking-mpi-parallel-retrieval.md`

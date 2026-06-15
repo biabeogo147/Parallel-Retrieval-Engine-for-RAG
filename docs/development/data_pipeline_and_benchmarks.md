@@ -295,9 +295,9 @@ Practical implications:
 - different seed => different payload
 - Phase 3 can assume vectors are already normalized
 
-## Phase 3 Retrieval Preconditions
+## Phase 3 and Phase 4 Retrieval Preconditions
 
-The current exact sequential retriever consumes these binary files directly with no extra preprocessing stage in between. It requires:
+The current exact sequential and blocking MPI retrievers consume these binary files directly with no extra preprocessing stage in between. They require:
 
 - memory and query datasets to have the same `dimension`
 - the normalized flag to be present on both datasets
@@ -305,7 +305,7 @@ The current exact sequential retriever consumes these binary files directly with
 - `topk >= 1`
 - `topk <= num_vectors` for the memory dataset
 
-If any of those conditions fail, `sequential_retriever` exits non-zero with a clear `Error: ...` message instead of silently continuing.
+If any of those conditions fail, the retriever exits non-zero with a clear `Error: ...` message instead of silently continuing.
 
 ## Row-Index ID Convention
 
@@ -314,7 +314,7 @@ Phase 3 defines identifiers directly from row position because the binary vector
 - `query_id` = zero-based row index in `query_vectors.bin`
 - `memory_id` = zero-based row index in `memory_vectors.bin`
 
-This is now the canonical ID contract for sequential output and for future parallel correctness comparison.
+This is now the canonical ID contract for sequential output, parallel output, and future correctness comparison tooling.
 
 ## Phase 3 Sequential Output
 
@@ -341,6 +341,45 @@ Typical WSL command:
   --topk 10 \
   --output results/sequential_topk.csv
 ```
+
+## Phase 4 Parallel Output
+
+Blocking MPI retrieval writes the same top-k CSV schema as the sequential path:
+
+```text
+query_id,rank_position,memory_id,score
+```
+
+The ordering contract stays identical:
+
+- higher score first
+- lower `memory_id` first on ties
+
+Typical WSL command:
+
+```bash
+mpirun -np 4 ./build/debug/parallel_retriever \
+  --vectors data/memory_vectors.bin \
+  --queries data/query_vectors.bin \
+  --topk 10 \
+  --output results/parallel_topk.csv \
+  --metrics results/parallel_metrics.csv
+```
+
+Phase 4 also locks the per-rank metrics CSV schema to:
+
+```text
+rank,local_N,compute_time,communication_time,active_time,global_total_time,idle_time
+```
+
+Definitions:
+
+- `local_N` = number of memory rows assigned to that rank by the shard formula
+- `compute_time` = total local-search time for that rank; rank `0` also includes global merge time
+- `communication_time` = total time spent in query broadcasts and fixed-size candidate gathers
+- `active_time = compute_time + communication_time`
+- `global_total_time` = maximum retrieval-loop wall time across ranks for that invocation
+- `idle_time = global_total_time - active_time`
 
 ## Inspection Tool
 
@@ -383,7 +422,8 @@ start(rank) = rank * base + min(rank, rem)
 - one contiguous local `float32` slice for that rank
 
 Phase 3 uses row-major full reads through `BinaryDataset::read_all(...)`.
-The shard contract remains important because Phase 4 parallel retrieval should reuse this exact decomposition instead of inventing a second shard policy.
+Phase 4 uses `BinaryDataset::read_shard(...)` for the memory database and `BinaryDataset::read_all(...)` on rank `0` for queries.
+The shard contract remains important because the current MPI path already depends on this exact decomposition and later benchmark phases should not invent a second shard policy.
 
 ## WSL Usage Notes
 
@@ -401,5 +441,7 @@ ctest --test-dir build/debug --output-on-failure
 ./build/debug/generate_vectors --N 100000 --D 384 --output data/memory_vectors.bin
 ./build/debug/generate_queries --Q 100 --D 384 --output data/query_vectors.bin
 ./build/debug/inspect_dataset --input data/memory_vectors.bin
+./build/debug/sequential_retriever --vectors data/memory_vectors.bin --queries data/query_vectors.bin --topk 10 --output results/sequential_topk.csv
+mpirun -np 4 ./build/debug/parallel_retriever --vectors data/memory_vectors.bin --queries data/query_vectors.bin --topk 10 --output results/parallel_topk.csv --metrics results/parallel_metrics.csv
 ```
 

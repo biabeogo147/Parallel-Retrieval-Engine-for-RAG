@@ -142,7 +142,7 @@ OMPI_ALLOW_RUN_AS_ROOT=1 OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1 \
 
 The preferred fix is to complete Ubuntu's normal user setup and work as that user afterward.
 
-Optional Phase 3 exact-retrieval sanity check:
+Optional Phase 4 exact-retrieval sanity check:
 
 ```bash
 ./build/debug/generate_vectors --N 100000 --D 384 --output data/memory_vectors.bin
@@ -153,6 +153,12 @@ Optional Phase 3 exact-retrieval sanity check:
   --queries data/query_vectors.bin \
   --topk 10 \
   --output results/sequential_topk.csv
+mpirun -np 4 ./build/debug/parallel_retriever \
+  --vectors data/memory_vectors.bin \
+  --queries data/query_vectors.bin \
+  --topk 10 \
+  --output results/parallel_topk.csv \
+  --metrics results/parallel_metrics.csv
 ```
 
 ## Dataset Mounts
@@ -325,6 +331,29 @@ The current CSV contract is:
 - `rank_position` is one-based within each query
 - `score` is written with fixed decimal formatting to 8 digits after the decimal point
 
+## Phase 4 Blocking Parallel Retrieval Flow
+
+Run exact top-k over sharded memory vectors with blocking MPI collectives:
+
+```bash
+mpirun -np 4 ./build/debug/parallel_retriever \
+  --vectors data/memory_vectors.bin \
+  --queries data/query_vectors.bin \
+  --topk 10 \
+  --output results/parallel_topk.csv \
+  --metrics results/parallel_metrics.csv
+```
+
+The current parallel output contracts are:
+
+- `parallel_topk.csv` uses the same schema as the sequential binary:
+  - `query_id,rank_position,memory_id,score`
+- `parallel_metrics.csv` uses:
+  - `rank,local_N,compute_time,communication_time,active_time,global_total_time,idle_time`
+- `query_id` and `memory_id` stay zero-based global row indices
+- `parallel_retriever` reads the memory dataset per-rank via `BinaryDataset::read_shard(...)`
+- rank `0` reads the full query payload, broadcasts one query vector at a time, gathers fixed-size local top-k buffers, merges the global top-k, and writes both CSV outputs
+
 Use the repository-local `data/` directory for synthetic outputs produced by development and smoke checks. Reserve `/mnt/e/data` for larger external benchmark corpora and converted real datasets added in later phases.
 
 ## Generated Artifacts
@@ -363,6 +392,8 @@ Public project headers for shared code used across binaries and tests.
 - `BinaryDataset.hpp`: binary header contract, full reads, and shard-aware reads
 - `TopKHeap.hpp`: deterministic in-memory top-k candidate selection
 - `SequentialRetriever.hpp`: exact sequential retrieval over validated in-memory datasets
+- `ParallelRetriever.hpp`: global top-k merge and parallel metrics row type
+- `MpiUtils.hpp`: blocking MPI helpers for query broadcast, fixed-size candidate gather, and startup/metrics coordination
 
 ### `src/`
 
@@ -374,8 +405,10 @@ Implementation files and entrypoints.
 - `BinaryDataset.cpp`: binary dataset read/write and shard computation
 - `TopKHeap.cpp`: heap maintenance and tie-break ordering
 - `SequentialRetriever.cpp`: exact dot-product scan for one query or all queries
+- `ParallelRetriever.cpp`: sentinel filtering and global top-k merge
+- `MpiUtils.cpp`: MPI_Bcast/MPI_Gather wrappers and rank-metrics collection helpers
 - `main_sequential.cpp`: sequential CLI load, search, and CSV output path
-- `main_parallel.cpp`: MPI CLI stub
+- `main_parallel.cpp`: MPI CLI load, shard-local search, gather, merge, and metrics output path
 
 ### `tests/`
 
@@ -384,7 +417,8 @@ Small executable or script-based checks used by `CTest`.
 - `ConfigLoggerTest.cpp`: parser and usage-contract verification
 - `BinaryDatasetTest.cpp`: binary header validation, payload validation, and shard logic
 - `SequentialRetrieverTest.cpp`: retrieval ordering, top-k behavior, offset handling, and failure cases
-- `tests/cmake/*.cmake`: CLI smoke, determinism, and sequential end-to-end checks
+- `ParallelRetrieverTest.cpp`: global merge ordering and sentinel handling
+- `tests/cmake/*.cmake`: CLI smoke, determinism, sequential checks, and blocking MPI end-to-end checks
 
 Later phases may add retrieval correctness and benchmark-result checks here.
 
@@ -441,6 +475,7 @@ The current build introduces these targets:
 - `inspect_dataset`
 - `binary_dataset_test`
 - `sequential_retriever_test`
+- `parallel_retriever_test`
 
 `retriever_core` is the shared internal layer. Later phases should prefer extending it instead of duplicating parsing or logging logic in individual binaries.
 
