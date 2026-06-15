@@ -1,8 +1,8 @@
 # Environment Setup
 
-## Canonical Phase 1 Environment
+## Canonical Development Environment
 
-Phase 1 standardizes on:
+This repository standardizes on:
 
 - WSL2
 - Ubuntu 24.04 LTS
@@ -107,7 +107,7 @@ Release build:
 cmake --build build/release
 ```
 
-## Step 5: Run Phase 1 Smoke Checks
+## Step 5: Run Repository Smoke Checks
 
 ```bash
 ctest --test-dir build/debug --output-on-failure
@@ -130,6 +130,13 @@ OMPI_ALLOW_RUN_AS_ROOT=1 OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1 \
 
 The preferred fix is to complete Ubuntu's normal user setup and work as that user afterward.
 
+Optional Phase 2 dataset sanity check:
+
+```bash
+./build/debug/generate_vectors --N 100000 --D 384 --output data/memory_vectors.bin
+./build/debug/inspect_dataset --input data/memory_vectors.bin
+```
+
 ## Dataset Mounts
 
 The host dataset root is:
@@ -144,7 +151,7 @@ Inside WSL, use:
 /mnt/e/data
 ```
 
-Phase 1 documents these dataset paths as canonical references:
+Development docs use these dataset paths as canonical references for external corpora:
 
 - `/mnt/e/data/ms_marco`
 - `/mnt/e/data/squad`
@@ -159,11 +166,11 @@ If you use CLion or VS Code:
 3. Use `mpicxx` and `mpirun` inside the WSL environment.
 4. Keep generated artifacts under `build/debug` and `build/release`.
 
-## Phase 1 Environment Exit Criteria
+## Environment Exit Criteria
 
 The environment setup is considered ready when:
 
 1. `Ubuntu-24.04` is installed under WSL2.
 2. The repo is available from the canonical WSL path.
 3. OpenMPI, CMake, and Ninja are installed inside Ubuntu.
-4. The Phase 1 configure, build, and smoke commands run in WSL.
+4. The configure, build, and smoke commands run in WSL.

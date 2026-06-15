@@ -4,11 +4,12 @@
 
 ### `include/`
 
-Public project headers for shared code used across binaries and tests. Phase 1 keeps this small:
+Public project headers for shared code used across binaries and tests.
 
 - `Config.hpp`: CLI contract and validation result types
 - `Logger.hpp`: log-level parsing and stderr logger
 - `MpiSession.hpp`: minimal MPI lifecycle wrapper
+- `BinaryDataset.hpp`: binary header contract, full reads, and shard-aware reads
 
 ### `src/`
 
@@ -17,6 +18,7 @@ Implementation files and entrypoints.
 - `Config.cpp`: parse and validate CLI arguments
 - `Logger.cpp`: logging implementation
 - `MpiSession.cpp`: MPI bootstrap and teardown
+- `BinaryDataset.cpp`: binary dataset read/write and shard computation
 - `main_sequential.cpp`: sequential CLI stub
 - `main_parallel.cpp`: MPI CLI stub
 
@@ -25,8 +27,10 @@ Implementation files and entrypoints.
 Small executable or script-based checks used by `CTest`.
 
 - `ConfigLoggerTest.cpp`: parser and usage-contract verification
+- `BinaryDatasetTest.cpp`: binary header validation, payload validation, and shard logic
+- `tests/cmake/*.cmake`: CLI smoke and determinism checks for generator tools
 
-Future phases may add more CLI smoke checks and algorithm tests here.
+Later phases may add retrieval correctness and benchmark-result checks here.
 
 ### `scripts/`
 
@@ -39,7 +43,12 @@ POSIX shell helpers intended to run inside Ubuntu WSL.
 
 ### `tools/`
 
-Standalone helper binaries and utilities that are not part of the main retriever entrypoints. Phase 1 leaves this empty on purpose so later phases can add dataset generators and inspectors without mixing them into `src/`.
+Standalone helper binaries and utilities that are not part of the main retriever entrypoints.
+
+- `generate_vectors.cpp`: deterministic synthetic memory-vector generator
+- `generate_queries.cpp`: deterministic synthetic query-vector generator
+- `inspect_dataset.cpp`: read-only binary header inspection tool
+- `SyntheticGeneratorCommon.hpp`: shared tool-only generator and parser helpers
 
 ### `data/`
 
@@ -67,12 +76,16 @@ Execution plans and planning artifacts tied to dated work items.
 
 ## Build Targets
 
-Phase 1 introduces these targets:
+The current build introduces these targets:
 
 - `retriever_core`
 - `sequential_retriever`
 - `parallel_retriever`
 - `config_logger_test`
+- `generate_vectors`
+- `generate_queries`
+- `inspect_dataset`
+- `binary_dataset_test`
 
 `retriever_core` is the shared internal layer. Later phases should prefer extending it instead of duplicating parsing or logging logic in individual binaries.
 
@@ -81,4 +94,4 @@ Phase 1 introduces these targets:
 1. Shared logic belongs in `retriever_core`, not duplicated in each `main`.
 2. New docs must use the refactored `docs/development` and `docs/plans` paths.
 3. WSL-first commands should be the default in docs and scripts.
-4. Empty future directories should stay obvious and intentional rather than filled with placeholder code.
+4. Tool-only helpers should stay under `tools/` unless they become shared runtime code needed by retrievers and tests.

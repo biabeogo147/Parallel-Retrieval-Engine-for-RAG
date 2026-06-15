@@ -24,4 +24,4 @@ else
     mpirun -np "$mpi_procs" "$build_dir/parallel_retriever" --help >/dev/null
 fi
 
-echo "Phase 1 smoke tests completed."
+echo "Repository smoke tests completed."

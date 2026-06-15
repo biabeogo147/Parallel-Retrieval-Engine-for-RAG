@@ -2,14 +2,14 @@
 
 ## Overview
 
-This repository hosts a WSL-first C++17 and OpenMPI foundation for an exact top-k long-term memory retriever. Phase 1 focuses on maintainability: project layout, CLI contracts, MPI bootstrap, smoke-test coverage, and developer documentation.
+This repository hosts a WSL-first C++17 and OpenMPI codebase for an exact top-k long-term memory retriever.
 
-The retrieval algorithm itself is intentionally deferred to later phases. Right now, the binaries provide:
+The current implementation covers:
 
-- stable CLI parsing
-- help and validation behavior
-- minimal logging
-- MPI process bootstrap for the parallel entrypoint
+- Phase 1 foundation work: project layout, CLI contracts, MPI bootstrap, smoke-test coverage, and developer documentation
+- Phase 2 synthetic dataset work: deterministic normalized `float32` dataset generation, binary dataset loading, shard-aware reads, and a dataset inspection tool
+
+The retrieval algorithm itself is intentionally deferred to later phases.
 
 ## Canonical Development Environment
 
@@ -32,21 +32,21 @@ After Ubuntu is available, work inside WSL from the canonical repo path.
 
 ```text
 ~/work/Parallel-Retrieval-Engine-for-RAG/
-├── CMakeLists.txt
-├── README.md
-├── include/
-├── src/
-├── tests/
-├── scripts/
-├── tools/
-├── data/
-├── results/
-├── docs/
-│   ├── development/
-│   └── plans/
-└── build/
-    ├── debug/
-    └── release/
+|-- CMakeLists.txt
+|-- README.md
+|-- include/
+|-- src/
+|-- tests/
+|-- scripts/
+|-- tools/
+|-- data/
+|-- results/
+|-- docs/
+|   |-- development/
+|   `-- plans/
+`-- build/
+    |-- debug/
+    `-- release/
 ```
 
 For a folder-by-folder explanation, see:
@@ -65,7 +65,7 @@ git clone <your-remote-url> Parallel-Retrieval-Engine-for-RAG
 cd Parallel-Retrieval-Engine-for-RAG
 ```
 
-Install the Phase 1 toolchain inside Ubuntu:
+Install the development toolchain inside Ubuntu:
 
 ```bash
 ./scripts/setup_wsl_dev_env.sh
@@ -86,6 +86,14 @@ Smoke-check the CLI entrypoints:
 mpirun -np 4 ./build/debug/parallel_retriever --help
 ```
 
+Generate and inspect synthetic datasets:
+
+```bash
+./build/debug/generate_vectors --N 100000 --D 384 --output data/memory_vectors.bin
+./build/debug/generate_queries --Q 100 --D 384 --output data/query_vectors.bin
+./build/debug/inspect_dataset --input data/memory_vectors.bin
+```
+
 If your Ubuntu distro is still running as `root` during initial setup, OpenMPI blocks `mpirun` by default. In that temporary case, either finish the normal Ubuntu user setup or run:
 
 ```bash
@@ -93,7 +101,7 @@ OMPI_ALLOW_RUN_AS_ROOT=1 OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1 \
   mpirun -np 4 ./build/debug/parallel_retriever --help
 ```
 
-Or run the combined Phase 1 smoke script:
+Or run the combined smoke script:
 
 ```bash
 ./scripts/run_smoke_tests.sh
@@ -101,20 +109,21 @@ Or run the combined Phase 1 smoke script:
 
 ## Current Phase Status
 
-Phase 1 provides:
+Implemented now:
 
-- `retriever_core` shared internal code for config parsing and logging
+- `retriever_core` shared internal code for config parsing, logging, and binary dataset IO
 - `sequential_retriever` CLI scaffold
 - `parallel_retriever` MPI scaffold
-- a small `CTest` test target for parser behavior
+- `generate_vectors`, `generate_queries`, and `inspect_dataset`
+- `CTest` coverage for parser behavior, dataset IO, and deterministic generator smoke checks
 - WSL helper scripts and onboarding docs
 
-Phase 2 and later will add:
+Still deferred to later phases:
 
-- binary dataset generation and loading
 - exact retrieval logic
 - correctness checking
 - runtime, granularity, and speedup experiments
+- real-text preprocessing and corpus conversion
 
 ## Documentation Index
 
@@ -124,5 +133,8 @@ Phase 2 and later will add:
 - `docs/development/environment_setup.md`
 - `docs/development/dev_workflow.md`
 - `docs/development/codebase_layout.md`
+- `docs/development/dataset_pipeline.md`
 - `docs/development/parallel_agent_memory_retriever_plan.md`
 - `docs/plans/2026-06-15-phase-0-documentation.md`
+- `docs/plans/2026-06-15-phase-1-foundation.md`
+- `docs/plans/2026-06-15-phase-2-dataset-generator-loader.md`

@@ -60,7 +60,7 @@ Run tests:
 ctest --test-dir build/debug --output-on-failure
 ```
 
-Run the Phase 1 smoke bundle:
+Run the repository smoke bundle:
 
 ```bash
 ./scripts/run_smoke_tests.sh
@@ -87,12 +87,34 @@ OMPI_ALLOW_RUN_AS_ROOT=1 OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1 \
   mpirun -np 4 ./build/debug/parallel_retriever --help
 ```
 
+## Phase 2 Synthetic Dataset Flow
+
+Generate normalized memory vectors:
+
+```bash
+./build/debug/generate_vectors --N 100000 --D 384 --output data/memory_vectors.bin
+```
+
+Generate normalized query vectors:
+
+```bash
+./build/debug/generate_queries --Q 100 --D 384 --output data/query_vectors.bin
+```
+
+Inspect a generated dataset:
+
+```bash
+./build/debug/inspect_dataset --input data/memory_vectors.bin
+```
+
+Use the repository-local `data/` directory for synthetic outputs produced by development and smoke checks. Reserve `/mnt/e/data` for larger external benchmark corpora and converted real datasets added in later phases.
+
 ## Generated Artifacts
 
 Generated files should stay inside these locations:
 
 - build outputs: `build/debug` and `build/release`
-- local datasets produced by future phases: `data/`
+- local synthetic datasets produced by the current pipeline: `data/`
 - benchmark outputs produced by future phases: `results/`
 
 Do not commit generated content from `build/`, `data/`, or `results/`.
