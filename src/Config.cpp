@@ -167,7 +167,11 @@ std::string usage_text(const AppMode mode) {
     std::ostringstream usage;
 
     usage << "Usage: " << binary_name(mode) << " [options]\n\n";
-    usage << "Phase 1 scaffold: CLI parsing, logging, and MPI bootstrap only.\n\n";
+    if (mode == AppMode::Sequential) {
+        usage << "Phase 3 exact sequential retrieval over normalized row-major binary datasets.\n\n";
+    } else {
+        usage << "Parallel retrieval scaffold: CLI parsing, logging, and MPI bootstrap only.\n\n";
+    }
     usage << "Options:\n";
     usage << "  --help                 Show this help message and exit.\n";
     usage << "  --vectors <path>       Path to the memory vector dataset.\n";

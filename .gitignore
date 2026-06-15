@@ -4,6 +4,8 @@
 .venv/
 build/
 cmake*
+!tests/cmake/
+!tests/cmake/*.cmake
 
 data/*
 !data/.gitkeep

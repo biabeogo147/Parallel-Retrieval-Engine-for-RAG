@@ -1,4 +1,4 @@
-﻿# Source Guide
+# Source Guide
 
 This file merges the former `source_code_walkthrough.md` and `source_file_reference.md` without shortening their content.
 
@@ -13,22 +13,24 @@ This file merges the former `source_code_walkthrough.md` and `source_file_refere
 
 ## Purpose
 
-This document explains how the current Phase 1 and Phase 2 code actually runs at source level.
+This document explains how the current Phase 1, Phase 2, and Phase 3 code actually runs at source level.
 
 It is written for two use cases:
 
 - understanding the runtime pipeline for a report or presentation
-- onboarding the next engineer before Phase 3 retrieval logic is added
+- onboarding the next engineer before Phase 4 parallel retrieval logic is added
 
 The codebase currently provides:
 
-- retriever CLI scaffolding
-- MPI process bootstrap
+- retriever CLI parsing and validation
+- MPI process bootstrap for the parallel binary
 - deterministic synthetic dataset generation
 - binary dataset reading and shard-aware loading
+- exact sequential top-k retrieval over normalized vectors
+- canonical CSV output for sequential runs
 - smoke and validation tests
 
-It does **not** provide exact retrieval yet. The retriever binaries still stop after argument validation and logging.
+The only major retrieval work still deferred is the MPI search path and later benchmark orchestration.
 
 ## Reading Order
 
@@ -36,17 +38,24 @@ If you want the fastest path to understanding, read the source in this order:
 
 1. `CMakeLists.txt`
 2. `src/main_sequential.cpp`
-3. `src/main_parallel.cpp`
-4. `src/Config.cpp` and `include/Config.hpp`
-5. `src/Logger.cpp` and `include/Logger.hpp`
-6. `src/MpiSession.cpp` and `include/MpiSession.hpp`
-7. `tools/generate_vectors.cpp`
-8. `tools/generate_queries.cpp`
-9. `tools/SyntheticGeneratorCommon.hpp`
-10. `include/BinaryDataset.hpp` and `src/BinaryDataset.cpp`
-11. `tools/inspect_dataset.cpp`
-12. `tests/ConfigLoggerTest.cpp`
-13. `tests/BinaryDatasetTest.cpp`
+3. `include/SequentialRetriever.hpp`
+4. `src/SequentialRetriever.cpp`
+5. `include/TopKHeap.hpp`
+6. `src/TopKHeap.cpp`
+7. `include/BinaryDataset.hpp`
+8. `src/BinaryDataset.cpp`
+9. `src/main_parallel.cpp`
+10. `src/MpiSession.cpp` and `include/MpiSession.hpp`
+11. `src/Config.cpp` and `include/Config.hpp`
+12. `src/Logger.cpp` and `include/Logger.hpp`
+13. `tools/generate_vectors.cpp`
+14. `tools/generate_queries.cpp`
+15. `tools/SyntheticGeneratorCommon.hpp`
+16. `tools/inspect_dataset.cpp`
+17. `tests/SequentialRetrieverTest.cpp`
+18. `tests/BinaryDatasetTest.cpp`
+19. `tests/ConfigLoggerTest.cpp`
+20. `tests/cmake/*.cmake`
 
 For a file-by-file reference, also read [source_file_reference.md](#source-file-reference).
 
@@ -56,10 +65,10 @@ For a file-by-file reference, also read [source_file_reference.md](#source-file-
 
 - `retriever_core`
   - shared internal library
-  - contains `BinaryDataset.cpp`, `Config.cpp`, and `Logger.cpp`
+  - contains `BinaryDataset.cpp`, `Config.cpp`, `Logger.cpp`, `TopKHeap.cpp`, and `SequentialRetriever.cpp`
 - `sequential_retriever`
-  - sequential CLI entrypoint
-  - links only against `retriever_core`
+  - exact sequential CLI entrypoint
+  - links against `retriever_core`
 - `parallel_retriever`
   - MPI CLI entrypoint
   - links against `retriever_core` and `MPI::MPI_CXX`
@@ -73,13 +82,16 @@ For a file-by-file reference, also read [source_file_reference.md](#source-file-
   - parser and usage-contract checks
 - `binary_dataset_test`
   - binary dataset validation and shard checks
+- `sequential_retriever_test`
+  - heap ordering and exact retrieval correctness checks
 
 The design intent is:
 
 - shared reusable logic lives in `retriever_core`
 - MPI lifecycle logic lives only in the parallel entrypoint
 - generator-specific parsing and sampling stay in `tools/`
-- tests exercise both library code and real executable behavior
+- sequential file I/O and CSV writing stay in `main_sequential.cpp`
+- retrieval math and top-k maintenance are reusable in-memory core code for later Phase 4 local-shard reuse
 
 ## High-Level Architecture
 
@@ -91,16 +103,23 @@ flowchart TD
     G["inspect_dataset"] --> H["inspect_dataset.cpp"]
 
     B --> I["Config::parse_config"]
-    D --> J["MpiSession"]
-    D --> I
-    F --> K["SyntheticGeneratorCommon"]
-    F --> L["BinaryDataset::make_header / write"]
-    H --> M["BinaryDataset::read_header"]
+    B --> J["BinaryDataset::read_all"]
+    B --> K["SequentialRetriever::search_all"]
+    B --> L["write_results_csv"]
+    K --> M["search_local per query"]
+    M --> N["TopKHeap"]
 
-    I --> N["Logger"]
-    J --> O["MPI_Init / MPI_Finalize"]
-    M --> P["Header validation"]
-    L --> Q["Binary file output"]
+    D --> O["MpiSession"]
+    D --> I
+    F --> P["SyntheticGeneratorCommon"]
+    F --> Q["BinaryDataset::make_header / write"]
+    H --> R["BinaryDataset::read_header"]
+
+    I --> S["Logger"]
+    O --> T["MPI_Init / MPI_Finalize"]
+    J --> U["Header + payload validation"]
+    R --> U
+    Q --> V["Binary file output"]
 ```
 
 ## Runtime Pipeline by Executable
@@ -118,14 +137,18 @@ flowchart TD
     D -- "yes" --> F{"show_help?"}
     F -- "yes" --> G["print usage to stdout"]
     F -- "no" --> H["construct Logger"]
-    H --> I["log Phase 1 scaffold message"]
-    I --> J["exit 0"]
+    H --> I["BinaryDataset::read_all(vectors)"]
+    I --> J["BinaryDataset::read_all(queries)"]
+    J --> K["SequentialRetriever::search_all(...)"]
+    K --> L["write_results_csv(...)"]
+    L --> M["log success"]
+    M --> N["exit 0"]
 ```
 
 ### What happens in detail
 
 1. `main_sequential.cpp` calls `retriever::parse_config(retriever::AppMode::Sequential, argc, argv)`.
-2. `parse_config` validates the Phase 1 CLI contract:
+2. `parse_config` validates the retriever CLI contract:
    - `--vectors`
    - `--queries`
    - `--output`
@@ -140,15 +163,138 @@ flowchart TD
    - the program prints usage to `stdout`
    - it exits `0`
 5. Otherwise:
-   - it builds a `Logger` from `result.config.log_level`
-   - it logs two info messages
-   - it exits `0`
+   - it constructs a `Logger`
+   - it loads the memory dataset with `BinaryDataset::read_all(result.config.vectors_path)`
+   - it loads the query dataset with `BinaryDataset::read_all(result.config.queries_path)`
+   - it calls `SequentialRetriever::search_all(memory_dataset, query_dataset, topk)`
+   - it writes the canonical CSV file
+   - it logs completion and exits `0`
+6. Any runtime exception is caught at `main` boundary and printed as `Error: ...` before the process exits `1`
 
-### Important Phase Boundary
+### CSV Output Contract
 
-The sequential binary does **not** read vectors, score queries, or write retrieval output yet. It only proves that the CLI contract and future entrypoint shape are stable.
+`main_sequential.cpp` owns CSV serialization. It writes:
 
-## 2. `parallel_retriever`
+```text
+query_id,rank_position,memory_id,score
+```
+
+Rules:
+
+- one row per retrieved candidate
+- `query_id` is the zero-based query row index
+- `memory_id` is the zero-based memory row index
+- `rank_position` is one-based within that query's top-k list
+- `score` uses `std::fixed` and `std::setprecision(8)`
+
+### Why file I/O stays in `main_sequential.cpp`
+
+The retrieval core is intentionally file-agnostic. This keeps later reuse simple:
+
+- Phase 3 sequential mode can load entire datasets and call the core
+- Phase 4 parallel mode can load only a local shard and call the same local-scan method
+- CSV formatting remains a CLI concern, not a math-library concern
+
+## 2. `SequentialRetriever`
+
+`SequentialRetriever` is the main new Phase 3 core component.
+
+### Public surface
+
+It exposes two static methods:
+
+- `search_local(...)`
+  - scores one query vector against a flat contiguous memory buffer
+  - accepts `memory_id_offset` so Phase 4 can reuse it for local shard IDs
+- `search_all(...)`
+  - runs the full sequential execution across every query row in a fully loaded dataset
+
+### `search_all(...)` flow
+
+```mermaid
+flowchart TD
+    A["search_all(memory_dataset, query_dataset, topk)"] --> B["validate flags, dimensions, topk, payload sizes"]
+    B --> C["for each query row"]
+    C --> D["compute query pointer"]
+    D --> E["call search_local(...)"]
+    E --> F["append QueryTopKResult"]
+    F --> G{"more queries?"}
+    G -- "yes" --> C
+    G -- "no" --> H["return vector<QueryTopKResult>"]
+```
+
+### Validation rules
+
+`SequentialRetriever` throws `std::runtime_error` when:
+
+- memory and query dimensions do not match
+- either dataset is missing the normalized flag
+- either dataset is missing the row-major flag
+- `topk < 1`
+- `topk > num_vectors` for full sequential search
+- dataset payload size does not match header metadata
+
+Those checks are deliberate because the algorithm assumes:
+
+- row-major contiguous memory
+- dot product is valid because vectors are already normalized
+- IDs come from stable row positions
+
+## 3. `TopKHeap`
+
+`TopKHeap` is the second major Phase 3 component.
+
+### Purpose
+
+It keeps only the best `k` retrieval candidates seen so far during a linear scan.
+
+### Ordering contract
+
+The ordering logic is deterministic and matches the project specification:
+
+- better candidate = higher score
+- if scores tie, lower `memory_id` is better
+- worse candidate = lower score
+- if scores tie, higher `memory_id` is worse
+
+### Internal structure
+
+`TopKHeap` is implemented as a small manual binary heap over `std::vector<RetrievalCandidate>`.
+
+- the root element is always the worst currently kept candidate
+- a new candidate replaces the root only if it is strictly better
+- `sorted_results()` copies and sorts the retained candidates into final best-first order
+
+This design makes scan-time complexity:
+
+- `O(log k)` per retained update
+- `O(N log k)` for one query against `N` memory vectors
+
+### Why not return partial unsorted heap content
+
+The heap order is only useful internally. Final CSV output and tests need deterministic rank order, so `sorted_results()` returns:
+
+1. highest score first
+2. lower `memory_id` first on score ties
+
+## 4. Exact scoring path inside `search_local(...)`
+
+`search_local(...)` is the function Phase 4 is expected to reuse most directly.
+
+For one query row it does the following:
+
+1. validate flags, dimensions, `topk`, and buffer pointers
+2. create `TopKHeap topk_heap(topk)`
+3. loop over each local memory row
+4. compute the dot product of:
+   - `memory_values + local_index * dimension`
+   - `query_values`
+5. push `{memory_id_offset + local_index, score}` into the heap
+6. return `QueryTopKResult { query_id, sorted_results }`
+
+Because Phase 2 generators normalize all vectors, the dot product is already cosine similarity under the current assumptions.
+
+## 5. `parallel_retriever`
 
 ### Control Flow
 
@@ -181,8 +327,7 @@ flowchart TD
    - calls `MPI_Init` only if MPI is not already initialized
    - remembers whether this object owns MPI shutdown
    - queries `MPI_Comm_rank` and `MPI_Comm_size`
-3. The code then copies `argv` into `std::vector<const char*> args(argv, argv + argc)`.
-   - this is a small adapter because `parse_config` expects `const char* const argv[]`
+3. The code copies `argv` into `std::vector<const char*> args(argv, argv + argc)` because `parse_config` expects `const char* const argv[]`.
 4. `parse_config(AppMode::Parallel, argc, args.data())` is called.
 5. If parsing fails:
    - only rank `0` prints the error and usage
@@ -201,9 +346,9 @@ Without the rank guard, every process would print the same help or error text. T
 
 ### Important Phase Boundary
 
-Like the sequential binary, the parallel binary still does **not** load datasets or perform retrieval. Its current purpose is safe MPI startup, stable argument parsing, and correct help/error behavior under `mpirun`.
+Unlike the sequential binary, the parallel binary still does **not** load datasets or perform retrieval. Its current purpose is safe MPI startup, stable argument parsing, and correct help/error behavior under `mpirun`.
 
-## 3. `generate_vectors`
+## 6. `generate_vectors`
 
 ### Control Flow
 
@@ -223,7 +368,7 @@ flowchart TD
 
 ### What happens in detail
 
-1. `generate_vectors.cpp` defines two constants:
+1. `generate_vectors.cpp` defines:
    - `kBinaryName = "generate_vectors"`
    - `kCountFlag = "--N"`
 2. It calls `parse_generator_args(argc, argv, "--N")`.
@@ -235,11 +380,7 @@ flowchart TD
    - flags = `kFlagNormalized | kFlagRowMajor`
 7. `BinaryDataset::write` serializes header + payload to disk.
 
-### Output Contract
-
-The output file is a normalized, row-major `float32` binary dataset with the `PMRAGV1` header contract.
-
-## 4. `generate_queries`
+## 7. `generate_queries`
 
 This binary has the same structure as `generate_vectors`, but it changes the required count flag:
 
@@ -253,9 +394,7 @@ Everything else is intentionally identical:
 - same normalization rule
 - same binary writer
 
-The symmetry is useful for future phases because both vectors and queries share the same on-disk format.
-
-## 5. `inspect_dataset`
+## 8. `inspect_dataset`
 
 ### Control Flow
 
@@ -317,8 +456,8 @@ Key helper functions:
 - sequential mode rejects `--metrics`
 - parallel mode requires `--metrics`
 - `--help` short-circuits missing-option validation
-
-That last rule is why `sequential_retriever --help` works without needing `--vectors`, `--queries`, `--output`, and `--topk`.
+- sequential help text now describes the real exact-retrieval path
+- parallel help text still describes a scaffolded retrieval path
 
 ## `Logger`
 
@@ -381,11 +520,9 @@ Without this wrapper, every MPI entrypoint would need to manually handle:
 
 The destructor only finalizes MPI when `owns_mpi_` is true and `MPI_Finalized` says shutdown has not happened yet.
 
-This prevents accidental double finalization.
-
 ## `BinaryDataset`
 
-`BinaryDataset` is the most important reusable Phase 2 component.
+`BinaryDataset` is the most important reusable Phase 2 component and the direct input layer for Phase 3 retrieval.
 
 ### Public responsibilities
 
@@ -449,7 +586,56 @@ start = rank * base + min(rank, remainder)
 3. seeks directly to the shard's first `float`
 4. reads one contiguous slice into memory
 
-This is important for Phase 3 because MPI retrieval code can call the dataset layer directly instead of re-implementing sharding math.
+Phase 3 sequential retrieval uses full reads, but Phase 4 should reuse this shard boundary contract exactly.
+
+## `TopKHeap`
+
+### Public responsibilities
+
+- store up to `k` candidates
+- keep the worst retained candidate at the root
+- support deterministic best-first extraction at the end
+
+### Public types and functions
+
+- `RetrievalCandidate`
+- `candidate_is_better(...)`
+- `candidate_is_worse(...)`
+- `TopKHeap::push(...)`
+- `TopKHeap::sorted_results()`
+
+### Why the comparison helpers are shared
+
+The ordering helpers are defined once so:
+
+- the heap replacement logic
+- the final sort
+- tests
+
+all use the exact same ranking rule.
+
+## `SequentialRetriever`
+
+### Public responsibilities
+
+- validate the preconditions for exact in-memory retrieval
+- score one query against a local contiguous memory buffer
+- score all query rows against the full sequential memory dataset
+- return deterministic `QueryTopKResult` objects
+
+### Public types
+
+- `QueryTopKResult`
+- `RetrievalCandidate` from `TopKHeap.hpp`
+
+### Why `search_local(...)` exists separately
+
+This boundary is specifically future-facing:
+
+- Phase 3 sequential mode passes the full memory buffer and `memory_id_offset = 0`
+- Phase 4 parallel mode should pass only the rank-local shard plus the shard start offset
+
+That keeps the exact scoring and ranking logic shared even when the loading strategy changes.
 
 ## `SyntheticGeneratorCommon`
 
@@ -482,9 +668,9 @@ The retriever binaries do not need synthetic generator parsing or random samplin
 
 This design avoids depending on implementation-specific behavior of `std::normal_distribution`.
 
-## How Data Moves Through the Dataset Pipeline
+## How Data Moves Through the Dataset and Retrieval Pipeline
 
-The dataset tools form a complete Phase 2 pipeline:
+The current pipeline is now end-to-end for synthetic sequential experiments:
 
 1. `generate_vectors` or `generate_queries`
 2. parse CLI into `SyntheticGeneratorOptions`
@@ -492,14 +678,18 @@ The dataset tools form a complete Phase 2 pipeline:
 4. create `BinaryDatasetHeader`
 5. serialize with `BinaryDataset::write`
 6. verify later with `inspect_dataset` or `BinaryDataset::read_*`
+7. run `sequential_retriever`
+8. load both datasets with `BinaryDataset::read_all`
+9. score exact top-k with `SequentialRetriever`
+10. write `results/sequential_topk.csv`
 
-At the end of Phase 2, the retriever binaries still do not consume these files, but the format and loader are now fixed for Phase 3.
+At the end of Phase 3, the sequential path is real, while the parallel path is still only scaffolded.
 
 ## Tests as Executable Documentation
 
-The current tests are also part of the documentation story because they show intended behavior precisely.
+The tests are also part of the documentation story because they show intended behavior precisely.
 
-### `ConfigLoggerTest.cpp`
+## `ConfigLoggerTest.cpp`
 
 This test file documents the retriever CLI contract by checking:
 
@@ -510,7 +700,7 @@ This test file documents the retriever CLI contract by checking:
 - parallel-only `--metrics`
 - usage text contents
 
-### `BinaryDatasetTest.cpp`
+## `BinaryDatasetTest.cpp`
 
 This test file documents the binary contract by checking:
 
@@ -523,7 +713,19 @@ This test file documents the binary contract by checking:
 - non-divisible shard math
 - correctness of `read_shard`
 
-### CMake-driven smoke tests
+## `SequentialRetrieverTest.cpp`
+
+This test file documents the Phase 3 retrieval contract by checking:
+
+- heap keeps only the best `k`
+- tie-break prefers lower `memory_id`
+- exact single-query top-k on a known matrix
+- exact multi-query results
+- `memory_id_offset` behavior
+- dimension mismatch failure
+- `topk > num_vectors` failure
+
+## CMake-driven smoke tests
 
 The `tests/cmake/*.cmake` scripts validate behavior at the executable level:
 
@@ -531,18 +733,21 @@ The `tests/cmake/*.cmake` scripts validate behavior at the executable level:
 - generator output can be inspected successfully
 - deterministic seeds produce byte-identical files
 - different seeds change the binary output
+- `sequential_retriever` can generate a real CSV from small synthetic inputs
+- mismatched dimensions fail cleanly on the CLI path
 
-## Source Boundaries to Remember Before Phase 3
+## Source Boundaries to Remember Before Phase 4
 
-When implementing retrieval next, keep these current boundaries in mind:
+When implementing MPI retrieval next, keep these current boundaries in mind:
 
 - `parse_config` is only for retriever binaries
 - synthetic generator parsing stays in `tools/`
 - `BinaryDataset` already owns file-format and shard decisions
+- `TopKHeap` already owns deterministic top-k retention rules
+- `SequentialRetriever::search_local(...)` is the intended reusable exact local-search kernel
 - `MpiSession` already owns MPI lifecycle
 - rank `0` is the only process that should print human-facing CLI text in the parallel binary
-
-These boundaries are what keep the current codebase understandable.
+- CSV writing currently lives only in the sequential CLI entrypoint
 
 ## Suggested Report Framing
 
@@ -556,7 +761,11 @@ If you need to explain the current source code in a report, this wording fits th
    - deterministic synthetic data generation
    - fixed binary file contract
    - shard-aware loading
-3. Phase 3 can focus on retrieval logic without reopening environment, CLI, file-format, or sharding decisions.
+3. Phase 3 turned the sequential path into a real retriever:
+   - exact dot-product search
+   - deterministic top-k ranking
+   - canonical CSV output
+4. Phase 4 can focus on parallelizing the same local-search core instead of redesigning the sequential algorithm.
 
 
 ---
@@ -565,7 +774,7 @@ If you need to explain the current source code in a report, this wording fits th
 
 ## Purpose
 
-This document explains the role of every current source and test file that matters to the Phase 1 and Phase 2 implementation.
+This document explains the role of every current source and test file that matters to the Phase 1, Phase 2, and Phase 3 implementation.
 
 Use [source_code_walkthrough.md](#source-code-walkthrough) for end-to-end flow.
 Use this file when you want to answer: "What exactly is this file responsible for?"
@@ -643,7 +852,7 @@ This file is not part of `retriever_core` because MPI is required only by the pa
 
 **Responsibility**
 
-- declares the Phase 2 binary dataset contract and loader/writer API
+- declares the binary dataset contract and loader/writer API
 
 **Key symbols**
 
@@ -656,14 +865,50 @@ This file is not part of `retriever_core` because MPI is required only by the pa
 **Used by**
 
 - `src/BinaryDataset.cpp`
+- `src/main_sequential.cpp`
+- `src/SequentialRetriever.cpp`
 - `tools/generate_vectors.cpp`
 - `tools/generate_queries.cpp`
 - `tools/inspect_dataset.cpp`
 - `tests/BinaryDatasetTest.cpp`
 
-**Important note**
+## `include/TopKHeap.hpp`
 
-This is the shared boundary that Phase 3 retrieval logic should reuse instead of inventing a second dataset API.
+**Responsibility**
+
+- declares the deterministic candidate ordering helpers and heap wrapper
+
+**Key symbols**
+
+- `struct RetrievalCandidate`
+- `candidate_is_better(...)`
+- `candidate_is_worse(...)`
+- `class TopKHeap`
+
+**Used by**
+
+- `src/TopKHeap.cpp`
+- `src/SequentialRetriever.cpp`
+- `tests/SequentialRetrieverTest.cpp`
+
+## `include/SequentialRetriever.hpp`
+
+**Responsibility**
+
+- declares the reusable exact-search API used by the sequential binary and future local shard search
+
+**Key symbols**
+
+- `struct QueryTopKResult`
+- `class SequentialRetriever`
+- `search_local(...)`
+- `search_all(...)`
+
+**Used by**
+
+- `src/SequentialRetriever.cpp`
+- `src/main_sequential.cpp`
+- `tests/SequentialRetrieverTest.cpp`
 
 ## Shared Implementations in `src/`
 
@@ -690,10 +935,6 @@ This is the shared boundary that Phase 3 retrieval logic should reuse instead of
 - `parse_positive_int`
 - `failure`
 
-**Important note**
-
-This file intentionally stops at argument validation. It does not touch filesystem or retrieval logic.
-
 ## `src/Logger.cpp`
 
 **Responsibility**
@@ -706,14 +947,6 @@ This file intentionally stops at argument validation. It does not touch filesyst
 - converts accepted values into `LogLevel`
 - filters messages below the configured threshold
 - prints `[LEVEL] message` to `stderr`
-
-**Internal helper functions**
-
-- `to_lower_copy`
-
-**Important note**
-
-The logger is intentionally minimal so Phase 1 and Phase 2 scaffolding remains easy to audit.
 
 ## `src/MpiSession.cpp`
 
@@ -729,27 +962,67 @@ The logger is intentionally minimal so Phase 1 and Phase 2 scaffolding remains e
 - reads rank and world size
 - finalizes MPI only when appropriate
 
-**Important note**
+## `src/BinaryDataset.cpp`
 
-This file is the reason `parallel_retriever --help` works cleanly under `mpirun`.
+**Responsibility**
+
+- implements the binary dataset layer
+
+**What it does**
+
+- validates host byte order
+- validates header fields and total file size
+- serializes header + payload
+- reads header only
+- reads the full payload
+- reads a rank-local shard
+- computes contiguous shard bounds
+
+## `src/TopKHeap.cpp`
+
+**Responsibility**
+
+- implements the Phase 3 candidate-ranking heap
+
+**What it does**
+
+- defines better/worse comparison helpers
+- validates `topk` at construction time
+- retains only the best `k` candidates
+- keeps the worst retained candidate at the root
+- sorts the retained candidates into final rank order
+
+## `src/SequentialRetriever.cpp`
+
+**Responsibility**
+
+- implements exact in-memory top-k retrieval
+
+**What it does**
+
+- validates normalized and row-major flags
+- validates dimension compatibility
+- validates dataset payload size and `topk`
+- computes exact dot products
+- calls `TopKHeap` for candidate retention
+- returns `QueryTopKResult` objects for one query or all queries
 
 ## `src/main_sequential.cpp`
 
 **Responsibility**
 
-- provides the sequential CLI entrypoint
+- provides the exact sequential CLI entrypoint
 
 **What it does**
 
 - calls `parse_config` in sequential mode
-- prints error + usage on failure
+- prints error + usage on parse failure
 - prints usage on `--help`
 - constructs `Logger`
-- emits placeholder Phase 1 messages
-
-**Important note**
-
-This file is currently a scaffold only. Retrieval code will be added here in a later phase.
+- loads both binary datasets
+- runs `SequentialRetriever::search_all(...)`
+- writes canonical CSV output
+- catches runtime exceptions and prints clean `Error: ...` failures
 
 ## `src/main_parallel.cpp`
 
@@ -764,34 +1037,6 @@ This file is currently a scaffold only. Retrieval code will be added here in a l
 - parses the parallel CLI contract
 - restricts help/error output to rank `0`
 - logs the placeholder scaffold message from rank `0`
-
-**Important note**
-
-This file already establishes a future-friendly pattern for parallel control flow:
-
-- bootstrap MPI first
-- parse once on every rank
-- centralize user-facing output on rank `0`
-
-## `src/BinaryDataset.cpp`
-
-**Responsibility**
-
-- implements the entire Phase 2 binary dataset layer
-
-**What it does**
-
-- validates host byte order
-- validates header fields and total file size
-- serializes header + payload
-- reads header only
-- reads the full payload
-- reads a rank-local shard
-- computes contiguous shard bounds
-
-**Important note**
-
-This file is the core substrate for Phase 3 data loading.
 
 ## Tool-Specific Files in `tools/`
 
@@ -809,10 +1054,6 @@ This file is the core substrate for Phase 3 data loading.
 - generates deterministic normal samples
 - normalizes every vector
 
-**Why it is a header**
-
-Everything is `inline`, so both generator binaries can reuse the exact same implementation without adding another build target.
-
 ## `tools/generate_vectors.cpp`
 
 **Responsibility**
@@ -826,10 +1067,6 @@ Everything is `inline`, so both generator binaries can reuse the exact same impl
 - creates a normalized row-major binary header
 - writes the output file
 
-**Output meaning**
-
-The resulting file is intended to become the future memory-vector input for retriever runs.
-
 ## `tools/generate_queries.cpp`
 
 **Responsibility**
@@ -840,10 +1077,6 @@ The resulting file is intended to become the future memory-vector input for retr
 
 - mirrors `generate_vectors.cpp`
 - changes only the required count flag from `--N` to `--Q`
-
-**Output meaning**
-
-The resulting file is intended to become the future query input for retriever runs.
 
 ## `tools/inspect_dataset.cpp`
 
@@ -857,10 +1090,6 @@ The resulting file is intended to become the future query input for retriever ru
 - validates the binary file through `BinaryDataset::read_header`
 - prints the header fields in a human-readable format
 
-**Important note**
-
-This is both a developer utility and a test helper because CTest smoke checks can assert exact header output.
-
 ## Test Files in `tests/`
 
 ## `tests/ConfigLoggerTest.cpp`
@@ -869,36 +1098,24 @@ This is both a developer utility and a test helper because CTest smoke checks ca
 
 - verifies retriever CLI parsing and usage rules without MPI
 
-**What it does**
-
-- calls `parse_config` directly with small synthetic `argv` arrays
-- asserts help behavior
-- asserts missing-option behavior
-- asserts invalid-value behavior
-- asserts parallel-only `--metrics`
-- asserts usage text contains the right flags
-
-**Why it matters**
-
-This test acts as an executable specification for the retriever command-line contract.
-
 ## `tests/BinaryDatasetTest.cpp`
 
 **Responsibility**
 
 - verifies the binary dataset layer directly
 
+## `tests/SequentialRetrieverTest.cpp`
+
+**Responsibility**
+
+- verifies deterministic heap ordering and exact retrieval behavior directly
+
 **What it does**
 
-- writes small test files
-- injects deliberately invalid headers
-- checks round-trip behavior
-- checks shard decomposition rules
-- checks `read_shard` returns the expected slice
-
-**Why it matters**
-
-This test is the strongest proof that the on-disk contract is already fixed before Phase 3 begins.
+- exercises `TopKHeap`
+- exercises `SequentialRetriever::search_local(...)`
+- exercises `SequentialRetriever::search_all(...)`
+- checks failure paths that must throw
 
 ## `tests/cmake/GenerateAndInspectDataset.cmake`
 
@@ -906,34 +1123,23 @@ This test is the strongest proof that the on-disk contract is already fixed befo
 
 - provides an executable-level smoke test script for generators + inspector
 
-**What it does**
-
-- runs one generator tool
-- checks the output file was created
-- runs `inspect_dataset`
-- asserts the printed header fields contain the expected values
-
-**Why it matters**
-
-This tests real binaries, not just library calls.
-
 ## `tests/cmake/CheckGeneratorDeterminism.cmake`
 
 **Responsibility**
 
-- checks deterministic output across seeds
+- checks deterministic generator output across seeds
 
-**What it does**
+## `tests/cmake/RunSequentialRetrievalSmoke.cmake`
 
-- generates three files
-- uses the same arguments for two of them
-- uses a different seed for the third
-- compares SHA-256 hashes
+**Responsibility**
 
-**Expected behavior**
+- generates small datasets, runs the sequential binary, and checks the exact CSV header and row count
 
-- same seed => same hash
-- different seed => different hash
+## `tests/cmake/RunSequentialDimensionMismatchFail.cmake`
+
+**Responsibility**
+
+- proves the sequential CLI fails cleanly when memory and query dimensions differ
 
 ## Build File
 
@@ -951,46 +1157,50 @@ This tests real binaries, not just library calls.
 - finds MPI
 - builds `retriever_core`
 - builds all executable targets
-- registers CTest cases
-
-**Why it matters**
-
-This file is the authoritative map of which source files form which binary.
+- registers all CTest cases
 
 ## Quick Mapping by Concern
 
 If you need to explain the code by concern instead of by file, this is the shortest map:
 
-- CLI parsing for retrievers:
+- retriever CLI parsing:
   - `include/Config.hpp`
   - `src/Config.cpp`
-- Logging:
+- logging:
   - `include/Logger.hpp`
   - `src/Logger.cpp`
+- exact sequential retrieval core:
+  - `include/TopKHeap.hpp`
+  - `src/TopKHeap.cpp`
+  - `include/SequentialRetriever.hpp`
+  - `src/SequentialRetriever.cpp`
+- sequential CLI orchestration:
+  - `src/main_sequential.cpp`
 - MPI bootstrap:
   - `include/MpiSession.hpp`
   - `src/MpiSession.cpp`
   - `src/main_parallel.cpp`
-- Dataset format and IO:
+- dataset format and IO:
   - `include/BinaryDataset.hpp`
   - `src/BinaryDataset.cpp`
-- Synthetic dataset generation:
+- synthetic dataset generation:
   - `tools/SyntheticGeneratorCommon.hpp`
   - `tools/generate_vectors.cpp`
   - `tools/generate_queries.cpp`
-- Dataset inspection:
+- dataset inspection:
   - `tools/inspect_dataset.cpp`
-- Executable behavior checks:
+- executable behavior checks:
   - `tests/ConfigLoggerTest.cpp`
   - `tests/BinaryDatasetTest.cpp`
+  - `tests/SequentialRetrieverTest.cpp`
   - `tests/cmake/*.cmake`
 
 ## Suggested Maintenance Rule
 
-When Phase 3 starts, update both of these documentation files whenever one of these happens:
+When Phase 4 starts, update this document whenever one of these happens:
 
 - a new executable is added
 - a header gains a new public type or function
 - a file changes responsibility
 - the runtime pipeline changes
-
+- the sequential core becomes shared by MPI worker logic

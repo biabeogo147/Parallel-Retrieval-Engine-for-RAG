@@ -295,6 +295,53 @@ Practical implications:
 - different seed => different payload
 - Phase 3 can assume vectors are already normalized
 
+## Phase 3 Retrieval Preconditions
+
+The current exact sequential retriever consumes these binary files directly with no extra preprocessing stage in between. It requires:
+
+- memory and query datasets to have the same `dimension`
+- the normalized flag to be present on both datasets
+- the row-major flag to be present on both datasets
+- `topk >= 1`
+- `topk <= num_vectors` for the memory dataset
+
+If any of those conditions fail, `sequential_retriever` exits non-zero with a clear `Error: ...` message instead of silently continuing.
+
+## Row-Index ID Convention
+
+Phase 3 defines identifiers directly from row position because the binary vector files do not store explicit IDs:
+
+- `query_id` = zero-based row index in `query_vectors.bin`
+- `memory_id` = zero-based row index in `memory_vectors.bin`
+
+This is now the canonical ID contract for sequential output and for future parallel correctness comparison.
+
+## Phase 3 Sequential Output
+
+Exact sequential retrieval writes one CSV row per returned candidate using this fixed schema:
+
+```text
+query_id,rank_position,memory_id,score
+```
+
+Rules:
+
+- `rank_position` is one-based inside each query's local top-k list
+- scores are written with `std::fixed` and `std::setprecision(8)`
+- ordering is deterministic:
+  - higher score first
+  - if scores tie, lower `memory_id` first
+
+Typical WSL command:
+
+```bash
+./build/debug/sequential_retriever \
+  --vectors data/memory_vectors.bin \
+  --queries data/query_vectors.bin \
+  --topk 10 \
+  --output results/sequential_topk.csv
+```
+
 ## Inspection Tool
 
 Inspect a dataset header without mutating it:
@@ -334,6 +381,9 @@ start(rank) = rank * base + min(rank, rem)
 - validated header
 - `ShardBounds { start_index, count }`
 - one contiguous local `float32` slice for that rank
+
+Phase 3 uses row-major full reads through `BinaryDataset::read_all(...)`.
+The shard contract remains important because Phase 4 parallel retrieval should reuse this exact decomposition instead of inventing a second shard policy.
 
 ## WSL Usage Notes
 

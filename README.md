@@ -8,8 +8,7 @@ The current implementation covers:
 
 - Phase 1 foundation work: project layout, CLI contracts, MPI bootstrap, smoke-test coverage, and developer documentation
 - Phase 2 synthetic dataset work: deterministic normalized `float32` dataset generation, binary dataset loading, shard-aware reads, and a dataset inspection tool
-
-The retrieval algorithm itself is intentionally deferred to later phases.
+- Phase 3 retrieval work: exact sequential top-k retrieval, deterministic tie-breaking, and canonical CSV output
 
 ## Canonical Development Environment
 
@@ -85,12 +84,17 @@ Smoke-check the CLI entrypoints:
 mpirun -np 4 ./build/debug/parallel_retriever --help
 ```
 
-Generate and inspect synthetic datasets:
+Generate, inspect, and search synthetic datasets:
 
 ```bash
 ./build/debug/generate_vectors --N 100000 --D 384 --output data/memory_vectors.bin
 ./build/debug/generate_queries --Q 100 --D 384 --output data/query_vectors.bin
 ./build/debug/inspect_dataset --input data/memory_vectors.bin
+./build/debug/sequential_retriever \
+  --vectors data/memory_vectors.bin \
+  --queries data/query_vectors.bin \
+  --topk 10 \
+  --output results/sequential_topk.csv
 ```
 
 If your Ubuntu distro is still running as `root` during initial setup, OpenMPI blocks `mpirun` by default. In that temporary case, either finish the normal Ubuntu user setup or run:
@@ -111,16 +115,17 @@ Or run the combined smoke script:
 Implemented now:
 
 - `retriever_core` shared internal code for config parsing, logging, and binary dataset IO
-- `sequential_retriever` CLI scaffold
+- `TopKHeap` and `SequentialRetriever` reusable retrieval core
+- `sequential_retriever` exact sequential search path from binary input to CSV output
 - `parallel_retriever` MPI scaffold
 - `generate_vectors`, `generate_queries`, and `inspect_dataset`
-- `CTest` coverage for parser behavior, dataset IO, and deterministic generator smoke checks
+- `CTest` coverage for parser behavior, dataset IO, deterministic generator smoke checks, and sequential retrieval correctness/smoke checks
 - WSL helper scripts and onboarding docs
 
 Still deferred to later phases:
 
-- exact retrieval logic
-- correctness checking
+- parallel retrieval logic
+- sequential-vs-parallel correctness checking
 - runtime, granularity, and speedup experiments
 - real-text preprocessing and corpus conversion
 
@@ -135,3 +140,4 @@ Still deferred to later phases:
 - `docs/plans/2026-06-15-phase-0-documentation.md`
 - `docs/plans/2026-06-15-phase-1-foundation.md`
 - `docs/plans/2026-06-15-phase-2-dataset-generator-loader.md`
+- `docs/plans/2026-06-15-phase-3-sequential-exact-retrieval.md`

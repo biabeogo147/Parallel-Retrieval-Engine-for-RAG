@@ -14,6 +14,8 @@ add_library(
     src/BinaryDataset.cpp
     src/Config.cpp
     src/Logger.cpp
+    src/SequentialRetriever.cpp
+    src/TopKHeap.cpp
 )
 
 target_include_directories(retriever_core PUBLIC include)
@@ -75,9 +77,17 @@ add_executable(
 
 target_link_libraries(binary_dataset_test PRIVATE retriever_core)
 
+add_executable(
+    sequential_retriever_test
+    tests/SequentialRetrieverTest.cpp
+)
+
+target_link_libraries(sequential_retriever_test PRIVATE retriever_core)
+
 if(BUILD_TESTING)
     add_test(NAME config_logger_test COMMAND config_logger_test)
     add_test(NAME binary_dataset_test COMMAND binary_dataset_test)
+    add_test(NAME sequential_retriever_test COMMAND sequential_retriever_test)
     add_test(NAME sequential_help COMMAND sequential_retriever --help)
     add_test(NAME generate_vectors_help COMMAND generate_vectors --help)
     add_test(NAME generate_queries_help COMMAND generate_queries --help)
@@ -148,5 +158,27 @@ if(BUILD_TESTING)
             -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/phase2_determinism
             -P
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/CheckGeneratorDeterminism.cmake
+    )
+    add_test(
+        NAME sequential_retrieval_smoke
+        COMMAND
+            ${CMAKE_COMMAND}
+            -DGENERATE_VECTORS=$<TARGET_FILE:generate_vectors>
+            -DGENERATE_QUERIES=$<TARGET_FILE:generate_queries>
+            -DSEQUENTIAL=$<TARGET_FILE:sequential_retriever>
+            -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/phase3_sequential_smoke
+            -P
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/RunSequentialRetrievalSmoke.cmake
+    )
+    add_test(
+        NAME sequential_dimension_mismatch_fails
+        COMMAND
+            ${CMAKE_COMMAND}
+            -DGENERATE_VECTORS=$<TARGET_FILE:generate_vectors>
+            -DGENERATE_QUERIES=$<TARGET_FILE:generate_queries>
+            -DSEQUENTIAL=$<TARGET_FILE:sequential_retriever>
+            -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/phase3_dimension_mismatch
+            -P
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/RunSequentialDimensionMismatchFail.cmake
     )
 endif()

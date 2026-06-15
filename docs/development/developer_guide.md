@@ -142,11 +142,17 @@ OMPI_ALLOW_RUN_AS_ROOT=1 OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1 \
 
 The preferred fix is to complete Ubuntu's normal user setup and work as that user afterward.
 
-Optional Phase 2 dataset sanity check:
+Optional Phase 3 exact-retrieval sanity check:
 
 ```bash
 ./build/debug/generate_vectors --N 100000 --D 384 --output data/memory_vectors.bin
+./build/debug/generate_queries --Q 100 --D 384 --output data/query_vectors.bin
 ./build/debug/inspect_dataset --input data/memory_vectors.bin
+./build/debug/sequential_retriever \
+  --vectors data/memory_vectors.bin \
+  --queries data/query_vectors.bin \
+  --topk 10 \
+  --output results/sequential_topk.csv
 ```
 
 ## Dataset Mounts
@@ -299,6 +305,26 @@ Inspect a generated dataset:
 ./build/debug/inspect_dataset --input data/memory_vectors.bin
 ```
 
+## Phase 3 Exact Sequential Retrieval Flow
+
+Run exact top-k over binary datasets:
+
+```bash
+./build/debug/sequential_retriever \
+  --vectors data/memory_vectors.bin \
+  --queries data/query_vectors.bin \
+  --topk 10 \
+  --output results/sequential_topk.csv
+```
+
+The current CSV contract is:
+
+- header row exactly `query_id,rank_position,memory_id,score`
+- `query_id` is the zero-based query row index
+- `memory_id` is the zero-based memory row index
+- `rank_position` is one-based within each query
+- `score` is written with fixed decimal formatting to 8 digits after the decimal point
+
 Use the repository-local `data/` directory for synthetic outputs produced by development and smoke checks. Reserve `/mnt/e/data` for larger external benchmark corpora and converted real datasets added in later phases.
 
 ## Generated Artifacts
@@ -335,6 +361,8 @@ Public project headers for shared code used across binaries and tests.
 - `Logger.hpp`: log-level parsing and stderr logger
 - `MpiSession.hpp`: minimal MPI lifecycle wrapper
 - `BinaryDataset.hpp`: binary header contract, full reads, and shard-aware reads
+- `TopKHeap.hpp`: deterministic in-memory top-k candidate selection
+- `SequentialRetriever.hpp`: exact sequential retrieval over validated in-memory datasets
 
 ### `src/`
 
@@ -344,7 +372,9 @@ Implementation files and entrypoints.
 - `Logger.cpp`: logging implementation
 - `MpiSession.cpp`: MPI bootstrap and teardown
 - `BinaryDataset.cpp`: binary dataset read/write and shard computation
-- `main_sequential.cpp`: sequential CLI stub
+- `TopKHeap.cpp`: heap maintenance and tie-break ordering
+- `SequentialRetriever.cpp`: exact dot-product scan for one query or all queries
+- `main_sequential.cpp`: sequential CLI load, search, and CSV output path
 - `main_parallel.cpp`: MPI CLI stub
 
 ### `tests/`
@@ -353,7 +383,8 @@ Small executable or script-based checks used by `CTest`.
 
 - `ConfigLoggerTest.cpp`: parser and usage-contract verification
 - `BinaryDatasetTest.cpp`: binary header validation, payload validation, and shard logic
-- `tests/cmake/*.cmake`: CLI smoke and determinism checks for generator tools
+- `SequentialRetrieverTest.cpp`: retrieval ordering, top-k behavior, offset handling, and failure cases
+- `tests/cmake/*.cmake`: CLI smoke, determinism, and sequential end-to-end checks
 
 Later phases may add retrieval correctness and benchmark-result checks here.
 
@@ -364,7 +395,7 @@ POSIX shell helpers intended to run inside Ubuntu WSL.
 - `setup_wsl_dev_env.sh`: package install and tool verification
 - `configure_debug.sh`: configure the debug build tree
 - `configure_release.sh`: configure the release build tree
-- `run_smoke_tests.sh`: build and run the Phase 1 smoke suite
+- `run_smoke_tests.sh`: build and run the current repository smoke suite
 
 ### `tools/`
 
@@ -409,6 +440,7 @@ The current build introduces these targets:
 - `generate_queries`
 - `inspect_dataset`
 - `binary_dataset_test`
+- `sequential_retriever_test`
 
 `retriever_core` is the shared internal layer. Later phases should prefer extending it instead of duplicating parsing or logging logic in individual binaries.
 
