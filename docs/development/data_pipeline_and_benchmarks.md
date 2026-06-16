@@ -18,7 +18,7 @@ For command-first execution steps, stage-by-stage benchmark script usage, and co
 The project needs two different data categories:
 
 1. Controlled vector benchmarks for exact speedup and correctness.
-2. Real-text corpora for realism, demos, and future preprocessing experiments.
+2. Real-text corpora for external-baseline validation, report realism, and future preprocessing experiments.
 
 These should not be mixed into a single benchmark story.
 
@@ -107,7 +107,8 @@ Recommended role:
 
 1. Use unique `context` strings as memory items.
 2. Use `question` as query text.
-3. Use this as a clean English reference corpus for demos or smoke tests.
+3. Use this as the current real-corpus baseline path for Phase 8.
+4. Convert it through `sentence-transformers/all-MiniLM-L6-v2` into the same binary contract already consumed by the retrievers.
 
 Why it is not the primary benchmark:
 
@@ -133,9 +134,9 @@ Recommended role:
 | Dataset | Use now | Role |
 | --- | --- | --- |
 | Synthetic generator | Yes | Main correctness, runtime, granularity, and speedup benchmark |
-| MS MARCO v1.1 | Yes, after core pipeline works | Large real-text workload benchmark |
-| UIT-ViQuAD2.0 | Yes | Main Vietnamese demo corpus |
-| SQuAD | Yes | Clean English demo and smoke corpus |
+| MS MARCO v1.1 | Later | Large real-text workload extension after the current baseline path is stable |
+| UIT-ViQuAD2.0 | Later | Vietnamese extension corpus after the current English baseline path is stable |
+| SQuAD | Yes | Current real-corpus baseline for Phase 8 FAISS comparison |
 | Vietnamese Legal QA | Later | Domain-specific extension |
 | MS MARCO v2.1 | Later | Scale-up experiment after v1 is stable |
 
@@ -165,6 +166,14 @@ The retriever always consumes vectors, not raw text. Text datasets therefore nee
 
 For Phase 0 through Phase 4, deduplication is not required. Simplicity matters more than corpus purity.
 
+For the current implemented Phase 8 SQuAD path:
+
+- memory side = unique train `context` strings
+- query side = validation `question` strings
+- embedding model = `sentence-transformers/all-MiniLM-L6-v2`
+- output files = `vectors.bin`, `queries.bin`, `metadata.tsv`
+- output vectors stay normalized row-major `float32`
+
 ## Initial Benchmark Matrix
 
 ### Synthetic Runs
@@ -178,9 +187,9 @@ For Phase 0 through Phase 4, deduplication is not required. Simplicity matters m
 
 ### Real-Text Runs
 
-- UIT-ViQuAD2.0: use all unique contexts for demo and qualitative retrieval
-- SQuAD: use all unique contexts for smoke and cross-language sanity checks
-- MS MARCO v1.1: start with subsets, then scale toward the full flattened train passages
+- SQuAD: current implemented real-corpus comparison path for Phase 8
+- UIT-ViQuAD2.0: later Vietnamese extension after the SQuAD path is stable
+- MS MARCO v1.1: later large-workload extension after the SQuAD path is stable
 
 ## What Counts as Ground Truth
 
@@ -203,6 +212,11 @@ The current Phase 7 automation layer locks these defaults unless the caller over
 
 The automated `run_all_experiments.sh` flow intentionally uses `Q = 100` instead of `Q = 500` so the runtime-selection and speedup pipeline stays inside a practical WSL development window.
 
+Phase 8 keeps its FAISS comparison workflow separate from `run_all_experiments.sh`. That separation is intentional:
+
+- `run_all_experiments.sh` remains the canonical synthetic benchmark automation entrypoint
+- `run_faiss_comparison.sh` is the separate external-baseline workflow
+
 
 ---
 
@@ -210,7 +224,13 @@ The automated `run_all_experiments.sh` flow intentionally uses `Q = 100` instead
 
 ## Scope
 
-Phase 2 adds the synthetic vector pipeline only. It does not convert real-text corpora yet.
+Phase 2 introduced the synthetic vector pipeline first.
+
+The current repository still treats synthetic vectors as the primary benchmark path, but it now also includes one narrow real-corpus extension in Phase 8:
+
+- `SQuAD + sentence-transformers/all-MiniLM-L6-v2`
+
+No broader real-text corpus family has been promoted into the maintained workflow yet.
 
 The goals of this stage are:
 
@@ -651,6 +671,194 @@ Generated figures:
 - `results/figures/speedup_runtime.png`
 - `results/figures/speedup_curves.png`
 
+## Phase 8 FAISS External Baseline Workflow
+
+Phase 8 adds an external baseline experiment without changing the core retriever contract.
+
+The baseline algorithm is fixed to:
+
+- `faiss.IndexFlatIP`
+- CPU only
+- normalized row-major `float32` inputs
+- no ANN mode
+- no index training
+- no GPU path
+
+Because the vectors are normalized, inner product is interpreted as cosine-equivalent similarity for the current benchmark story.
+
+### Synthetic Phase 8 path
+
+The synthetic comparison reuses the existing binary datasets directly. No second vector-file format is introduced.
+
+Typical command:
+
+```bash
+python3 ./scripts/faiss_compare.py \
+  --dataset-name synthetic \
+  --vectors data/memory_vectors.bin \
+  --queries data/query_vectors.bin \
+  --topk 10 \
+  --threads 4 \
+  --output-topk results/faiss/synthetic_topk.csv \
+  --output-metrics results/faiss/synthetic_run_metrics.csv
+```
+
+The resulting top-k CSV uses the same schema as the sequential and parallel retrievers:
+
+```text
+query_id,rank_position,memory_id,score
+```
+
+The correctness policy is also reused directly:
+
+```bash
+./build/debug/verify_results \
+  --sequential results/sequential_topk.csv \
+  --parallel results/faiss/synthetic_topk.csv \
+  --epsilon 1e-5 \
+  --output results/faiss/synthetic_correctness.csv
+```
+
+### Real-corpus Phase 8 path: SQuAD + MiniLM
+
+The current maintained real-corpus conversion path is intentionally narrow.
+
+Input root:
+
+```text
+/mnt/e/data/squad/plain_text
+```
+
+Expected raw files:
+
+- `train-00000-of-00001.parquet`
+- `validation-00000-of-00001.parquet`
+
+Preparation command:
+
+```bash
+python3 ./scripts/prepare_squad_minilm.py \
+  --input-dir /mnt/e/data/squad/plain_text \
+  --output-dir .cache/real_corpora/squad_minilm \
+  --model sentence-transformers/all-MiniLM-L6-v2 \
+  --queries-limit 100
+```
+
+Conversion semantics:
+
+- memory texts = unique train `context` strings
+- query texts = validation `question` strings
+- vectors are generated with `normalize_embeddings=True`
+- output binary files remain compatible with:
+  - `sequential_retriever`
+  - `parallel_retriever`
+  - `faiss_compare.py`
+
+The output directory contains:
+
+- `vectors.bin`
+- `queries.bin`
+- `metadata.tsv`
+
+`metadata.tsv` is not consumed by the current retrievers. It exists so the converted corpus still preserves a readable mapping from `memory_id` to the original context text.
+
+### Phase 8 orchestration script
+
+The maintained command-first orchestration entrypoint is:
+
+```bash
+bash ./scripts/run_faiss_comparison.sh
+```
+
+This script:
+
+1. loads or generates `results/benchmark_selection.env`
+2. runs sequential retrieval on the selected synthetic dataset
+3. runs parallel retrieval on the selected synthetic dataset
+4. runs FAISS on the same synthetic dataset
+5. verifies FAISS output against the sequential reference
+6. prepares or reuses the SQuAD + MiniLM binary dataset
+7. repeats sequential, parallel, FAISS, and correctness checks on that real-corpus dataset
+8. aggregates the final comparison table under `results/faiss/comparison.csv`
+
+### Phase 8 run-metrics schema
+
+FAISS run metrics are written with this fixed schema:
+
+```text
+dataset_name,N,D,Q,k,threads,build_time,compute_time,total_time
+```
+
+Definitions:
+
+- `dataset_name` = logical dataset label such as `synthetic` or `squad_minilm`
+- `N` = memory-vector count
+- `D` = vector dimension
+- `Q` = query-vector count
+- `k` = requested top-k
+- `threads` = FAISS OpenMP thread count used through `faiss.omp_set_num_threads(...)`
+- `build_time` = time spent adding vectors into `IndexFlatIP`
+- `compute_time` = time spent in `IndexFlatIP.search(...)`
+- `total_time` = current canonical FAISS timing for comparison; Phase 8 locks this equal to `compute_time`
+
+### Phase 8 comparison table schema
+
+The final FAISS comparison table is:
+
+```text
+dataset_name,N,D,Q,k,parallel_workers,faiss_threads,parallel_compute_time,parallel_communication_time,parallel_total_time,faiss_build_time,faiss_compute_time,faiss_total_time,total_ratio,correctness_status,max_score_diff
+```
+
+Definitions:
+
+- `dataset_name` = `synthetic` or `squad_minilm`
+- `parallel_workers` = MPI process count used by the project retriever
+- `faiss_threads` = OpenMP thread count used by FAISS
+- `parallel_compute_time` = Phase 6 parallel run-summary compute time
+- `parallel_communication_time` = Phase 6 parallel run-summary communication time
+- `parallel_total_time` = Phase 6 parallel run-summary total time
+- `faiss_build_time` = FAISS index build time
+- `faiss_compute_time` = FAISS search time
+- `faiss_total_time` = canonical FAISS total time, currently equal to search time
+- `total_ratio = parallel_total_time / faiss_total_time`
+- `correctness_status` = `PASS` only when the corresponding correctness CSV is all pass rows
+- `max_score_diff` = maximum value observed across the correctness CSV for that dataset
+
+### Fair timing policy
+
+Phase 8 keeps the fairness policy explicit.
+
+Excluded from the canonical comparison window:
+
+- text loading
+- text embedding generation
+- binary file loading
+- CSV writing
+
+Included but separated:
+
+- FAISS `build_time`
+
+Included in the canonical `total_time` comparison:
+
+- sequential retrieval search window from Phase 6
+- parallel retrieval search window from Phase 6
+- FAISS `compute_time`
+
+That policy is the reason `faiss_total_time` is currently locked equal to `faiss_compute_time` rather than `build_time + compute_time`.
+
+### Phase 8 artifact layout
+
+The Phase 8 workflow writes:
+
+- `results/faiss/synthetic_topk.csv`
+- `results/faiss/synthetic_run_metrics.csv`
+- `results/faiss/synthetic_correctness.csv`
+- `results/faiss/squad_topk.csv`
+- `results/faiss/squad_run_metrics.csv`
+- `results/faiss/squad_correctness.csv`
+- `results/faiss/comparison.csv`
+
 ## Inspection Tool
 
 Inspect a dataset header without mutating it:
@@ -699,7 +907,7 @@ The shard contract remains important because the current MPI path already depend
 
 Use the repo-local `data/` directory for synthetic outputs produced by this phase.
 
-Use `/mnt/e/data` as the canonical root for larger external corpora and converted benchmark datasets added in later phases.
+Use `/mnt/e/data` as the canonical root for larger external corpora and use `.cache/real_corpora/` for converted real-corpus binaries produced by the maintained Phase 8 workflow.
 
 Typical WSL flow:
 
@@ -715,5 +923,6 @@ ctest --test-dir build/debug --output-on-failure
 mpirun -np 4 ./build/debug/parallel_retriever --vectors data/memory_vectors.bin --queries data/query_vectors.bin --topk 10 --output results/parallel_topk.csv --metrics results/parallel_metrics.csv --run-metrics results/parallel_run_metrics.csv
 ./build/debug/verify_results --sequential results/sequential_topk.csv --parallel results/parallel_topk.csv --epsilon 1e-5 --output results/correctness.csv
 bash ./scripts/run_all_experiments.sh
+bash ./scripts/run_faiss_comparison.sh
 ```
 

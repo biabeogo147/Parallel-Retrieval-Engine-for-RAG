@@ -13,6 +13,7 @@ The current implementation covers:
 - Phase 5 correctness work: sequential-vs-parallel CSV comparison, canonical correctness CSV output, and verification-oriented smoke coverage
 - Phase 6 benchmark-summary work: canonical one-run metrics rows for sequential and parallel retrieval
 - Phase 7 automation work: WSL-first synthetic benchmark scripts, speedup/runtime aggregation, and figure generation
+- Phase 8 external-baseline work: FAISS exact-flat comparison over synthetic datasets plus one real-corpus conversion path for `SQuAD + sentence-transformers/all-MiniLM-L6-v2`
 
 ## Canonical Development Environment
 
@@ -105,13 +106,16 @@ Implemented now:
 - optional `--run-metrics` output for sequential and parallel benchmark summaries
 - `generate_vectors`, `generate_queries`, and `inspect_dataset`
 - benchmark automation scripts for runtime-by-N selection, correctness, granularity, speedup, and all-in-one experiment runs
+- Phase 8 Python helpers for binary dataset reuse, FAISS exact-flat search, and SQuAD + MiniLM conversion
+- `run_faiss_comparison.sh` orchestration for sequential, parallel, and FAISS comparison artifacts under `results/faiss/`
 - `CTest` coverage for parser behavior, dataset IO, deterministic generator smoke checks, sequential retrieval checks, blocking MPI smoke checks, correctness-check workflow checks, and benchmark automation smoke runs
+- `CTest` smoke coverage for FAISS comparison-table generation and reduced-profile FAISS workflow orchestration
 - WSL helper scripts and onboarding docs
 
 Still deferred to later phases:
 
-- real-text preprocessing and corpus conversion
-- metadata-backed demo retrieval and report packaging
+- broader real-text corpus conversion beyond the current `SQuAD + all-MiniLM-L6-v2` path
+- metadata-backed agent/demo layers, alternate ANN-style baselines, and final report packaging
 
 ## Documentation Index
 
@@ -135,4 +139,6 @@ Still deferred to later phases:
 - `docs/plans/2026-06-15-phase-5-correctness-checker.md`
 - `docs/plans/2026-06-15-phase-6-benchmark-run-metrics.md`
 - `docs/plans/2026-06-15-phase-7-experiment-automation.md`
+- `docs/plans/2026-06-15-phase-8-plan-reframe.md`
+- `docs/plans/2026-06-16-phase-8-faiss-baseline-comparison.md`
 - `docs/plans/2026-06-15-usage-onboarding-docs.md`

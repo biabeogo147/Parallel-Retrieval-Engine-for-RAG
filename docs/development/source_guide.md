@@ -13,12 +13,12 @@ This file merges the former `source_code_walkthrough.md` and `source_file_refere
 
 ## Purpose
 
-This document explains how the current Phase 1, Phase 2, Phase 3, Phase 4, Phase 5, Phase 6, and Phase 7 code actually runs at source level.
+This document explains how the current Phase 1, Phase 2, Phase 3, Phase 4, Phase 5, Phase 6, Phase 7, and Phase 8 code actually runs at source level.
 
 It is written for two use cases:
 
 - understanding the runtime pipeline for a report or presentation
-- onboarding the next engineer before later real-text preprocessing and demo layers are added
+- onboarding the next engineer before later corpus expansion and appendix/demo layers are added
 
 The codebase currently provides:
 
@@ -34,9 +34,11 @@ The codebase currently provides:
 - one-run benchmark summary metrics for both retriever binaries
 - WSL-first benchmark automation scripts for runtime selection, correctness, granularity, and speedup studies
 - Python benchmark helpers for CSV aggregation and headless figure generation
+- a Phase 8 FAISS exact-flat external baseline workflow over the same binary dataset contract
+- a real-corpus conversion path for `SQuAD + sentence-transformers/all-MiniLM-L6-v2`
 - smoke and validation tests
 
-The major work still deferred is real-text preprocessing, corpus conversion, metadata-backed demo retrieval, and report-oriented packaging around the working synthetic benchmark pipeline.
+The major work still deferred is broader real-text corpus conversion beyond the SQuAD path, alternate baseline families beyond FAISS exact flat, metadata-backed demo layers, and report-oriented packaging around the working retrieval and baseline pipeline.
 
 ## Reading Order
 
@@ -73,15 +75,19 @@ If you want the fastest path to understanding, read the source in this order:
 29. `scripts/run_granularity.sh`
 30. `scripts/run_speedup.sh`
 31. `scripts/run_all_experiments.sh`
-32. `scripts/benchmark_csv.py`
-33. `scripts/plot_results.py`
-34. `tests/BenchmarkMetricsTest.cpp`
-35. `tests/CorrectnessCheckerTest.cpp`
-36. `tests/SequentialRetrieverTest.cpp`
-37. `tests/ParallelRetrieverTest.cpp`
-38. `tests/BinaryDatasetTest.cpp`
-39. `tests/ConfigLoggerTest.cpp`
-40. `tests/cmake/*.cmake`
+32. `scripts/run_faiss_comparison.sh`
+33. `scripts/phase8_common.py`
+34. `scripts/faiss_compare.py`
+35. `scripts/prepare_squad_minilm.py`
+36. `scripts/benchmark_csv.py`
+37. `scripts/plot_results.py`
+38. `tests/BenchmarkMetricsTest.cpp`
+39. `tests/CorrectnessCheckerTest.cpp`
+40. `tests/SequentialRetrieverTest.cpp`
+41. `tests/ParallelRetrieverTest.cpp`
+42. `tests/BinaryDatasetTest.cpp`
+43. `tests/ConfigLoggerTest.cpp`
+44. `tests/cmake/*.cmake`
 
 For a file-by-file reference, also read [source_file_reference.md](#source-file-reference).
 
@@ -169,6 +175,12 @@ flowchart TD
     AG --> C
     AG --> E
     AG --> AA
+    AJ["run_faiss_comparison.sh"] --> AG
+    AJ --> AK["faiss_compare.py"]
+    AJ --> AL["prepare_squad_minilm.py"]
+    AK --> AM["phase8_common.py"]
+    AL --> AM
+    AJ --> AH
 
     I --> Y["Logger"]
     M --> Z["MPI_Init / MPI_Finalize"]
@@ -530,9 +542,90 @@ This project now has a complete synthetic benchmark loop:
 
 That workflow is now part of the maintained developer path, not an external ad hoc process.
 
+## 13. Phase 8 External Baseline Scripts
+
+Phase 8 adds a separate Python-and-shell baseline layer. It does not replace the Phase 3 and Phase 4 retrievers. Instead, it uses the exact same binary input contract and compares the project implementation against FAISS as an external reference.
+
+### `phase8_common.py`
+
+This file is the narrow shared helper layer for the Phase 8 Python scripts.
+
+It owns:
+
+- binary header parsing for the existing `PMRAGV1` contract
+- validation that both datasets are normalized and row-major
+- binary writing for converted real-corpus datasets
+- canonical top-k CSV writing for FAISS outputs
+- Phase 8 run-metrics CSV writing
+- `metadata.tsv` writing for converted real corpora
+
+The important design choice is that this file mirrors the repository binary contract rather than inventing a second vector-file format just for the FAISS workflow.
+
+### `faiss_compare.py`
+
+This script is the exact-flat baseline runner.
+
+It:
+
+1. reads `vectors.bin` and `queries.bin`
+2. validates dimensions, flags, and `topk`
+3. builds `faiss.IndexFlatIP`
+4. runs exact top-k search
+5. writes:
+   - top-k CSV with the same schema as `sequential_retriever`
+   - one-row FAISS run-metrics CSV with:
+     - `dataset_name,N,D,Q,k,threads,build_time,compute_time,total_time`
+
+The script keeps timing boundaries explicit:
+
+- `build_time` measures `IndexFlatIP.add(...)`
+- `compute_time` measures `IndexFlatIP.search(...)`
+- `total_time` is currently locked equal to `compute_time`
+
+This preserves the fairness policy chosen in the master plan: FAISS cold-start index construction is reported, but it is not mixed into the canonical end-to-end comparison denominator.
+
+### `prepare_squad_minilm.py`
+
+This script is the current real-corpus conversion entrypoint.
+
+It:
+
+1. reads SQuAD parquet files from `/mnt/e/data/squad/plain_text` by default
+2. extracts unique train `context` strings as memory texts
+3. extracts validation `question` strings as query texts
+4. embeds both with `sentence-transformers/all-MiniLM-L6-v2`
+5. normalizes the embeddings through `SentenceTransformer(..., normalize_embeddings=True)`
+6. writes:
+   - `vectors.bin`
+   - `queries.bin`
+   - `metadata.tsv`
+
+This script creates a real-corpus dataset that the existing sequential and parallel retrievers can consume without any code changes.
+
+### `run_faiss_comparison.sh`
+
+This script is the orchestration layer for the Phase 8 baseline experiment.
+
+It:
+
+1. loads the benchmark environment through `benchmark_common.sh`
+2. reuses `benchmark_selection.env` or generates it if missing
+3. runs:
+   - sequential retrieval
+   - parallel retrieval
+   - FAISS exact-flat retrieval
+   - correctness verification between sequential and FAISS
+4. repeats the same flow for:
+   - one synthetic dataset
+   - one real `SQuAD + MiniLM` dataset
+5. calls `benchmark_csv.py build-faiss-comparison`
+6. writes `results/faiss/comparison.csv`
+
+This makes Phase 8 a maintained workflow rather than a one-off report script.
+
 ## How Data Moves Through the Current Pipeline
 
-The working synthetic pipeline is now:
+The working pipeline is now:
 
 1. `generate_vectors`
 2. `generate_queries`
@@ -542,6 +635,8 @@ The working synthetic pipeline is now:
 6. `verify_results`
 7. optional `--run-metrics` outputs from retrievers
 8. benchmark automation scripts and figure generation
+9. optional `prepare_squad_minilm.py` conversion for the Phase 8 real-corpus path
+10. `run_faiss_comparison.sh` for synthetic-plus-real FAISS baseline comparison
 
 In more detail:
 
@@ -561,8 +656,17 @@ In more detail:
    - `speedup.csv`
    - `benchmark_selection.env`
    - `results/figures/*.png`
+6. the Phase 8 real-corpus prep script optionally converts SQuAD text into:
+   - `vectors.bin`
+   - `queries.bin`
+   - `metadata.tsv`
+7. the Phase 8 FAISS workflow reuses both synthetic and real binary datasets to produce:
+   - `results/faiss/*_topk.csv`
+   - `results/faiss/*_run_metrics.csv`
+   - `results/faiss/*_correctness.csv`
+   - `results/faiss/comparison.csv`
 
-At the end of Phase 7, the synthetic benchmark path is end-to-end executable.
+At the end of Phase 8, the project has an end-to-end synthetic benchmark path plus an external-baseline comparison path over both synthetic vectors and one converted real corpus.
 
 ## Tests as Executable Documentation
 
@@ -658,8 +762,10 @@ The `tests/cmake/*.cmake` scripts validate executable-level behavior:
 - `run_granularity.sh` writes `granularity.csv` and a summary note
 - `run_speedup.sh` writes `speedup.csv` with a sequential `P = 1` baseline row
 - `run_all_experiments.sh` writes the final CSV set and all benchmark figures
+- `benchmark_csv.py build-faiss-comparison` writes the final Phase 8 comparison table
+- `run_faiss_comparison.sh` writes the expected FAISS synthetic and real-corpus artifacts on a reduced smoke profile
 
-## Source Boundaries to Remember After Phase 7
+## Source Boundaries to Remember After Phase 8
 
 - `parse_config` is only for retriever binaries
 - `BinaryDataset` owns file format and shard decomposition
@@ -668,8 +774,10 @@ The `tests/cmake/*.cmake` scripts validate executable-level behavior:
 - `CorrectnessChecker` owns per-query top-k CSV comparison semantics
 - `BenchmarkMetrics` owns canonical run-summary and speedup-row semantics
 - `MpiUtils` owns blocking transport helpers and startup coordination
+- `phase8_common.py` owns the Phase 8 Python-side mirror of the binary and CSV contracts
 - rank `0` is the only process that prints human-facing CLI text and writes CSV files in the MPI path
 - benchmark orchestration lives in scripts, but timing semantics stay in shared C++ code
+- FAISS remains an external baseline workflow and does not move into `retriever_core`
 
 ## Suggested Report Framing
 
@@ -705,6 +813,10 @@ If you need to explain the current source code in a report, this wording fits th
    - correctness gating
    - granularity and load-balance reporting
    - speedup tables and headless figures
+8. Phase 8 added an external baseline without replacing the custom implementation:
+   - FAISS exact-flat comparison on the same normalized binary vectors
+   - a real-corpus conversion path through `SQuAD + all-MiniLM-L6-v2`
+   - comparison tables that keep correctness and fairness policies explicit
 
 
 ---
@@ -713,7 +825,7 @@ If you need to explain the current source code in a report, this wording fits th
 
 ## Purpose
 
-This document explains the role of every current source and test file that matters to the Phase 1 through Phase 7 implementation.
+This document explains the role of every current source and test file that matters to the Phase 1 through Phase 8 implementation.
 
 Use [source_code_walkthrough.md](#source-code-walkthrough) for end-to-end flow.
 Use this file when you want to answer: "What exactly is this file responsible for?"
@@ -888,6 +1000,80 @@ Use this file when you want to answer: "What exactly is this file responsible fo
 
 - executable entrypoint for correctness comparison and `correctness.csv` output
 
+## Script Files in `scripts/`
+
+## `scripts/benchmark_common.sh`
+
+**Responsibility**
+
+- defines the shared shell environment, dataset-cache paths, `mpirun` wrapper, and helper functions reused by benchmark and Phase 8 scripts
+
+## `scripts/run_select_N.sh`
+
+**Responsibility**
+
+- runs the runtime-by-`N` sweep and writes `runtime_by_N.csv` plus `benchmark_selection.env`
+
+## `scripts/run_correctness.sh`
+
+**Responsibility**
+
+- runs the canonical sequential-versus-parallel correctness workflow for the selected synthetic dataset
+
+## `scripts/run_granularity.sh`
+
+**Responsibility**
+
+- runs one canonical parallel benchmark and promotes its per-rank metrics into `granularity.csv`
+
+## `scripts/run_speedup.sh`
+
+**Responsibility**
+
+- runs the sequential baseline plus multiple parallel worker counts and writes `speedup.csv`
+
+## `scripts/run_all_experiments.sh`
+
+**Responsibility**
+
+- orchestrates the full synthetic benchmark pipeline and figure-generation flow
+
+## `scripts/benchmark_csv.py`
+
+**Responsibility**
+
+- implements focused CSV aggregation commands for selection, speedup, granularity summaries, and the Phase 8 FAISS comparison table
+
+## `scripts/plot_results.py`
+
+**Responsibility**
+
+- renders the benchmark PNG figures from the canonical CSV outputs
+
+## `scripts/phase8_common.py`
+
+**Responsibility**
+
+- mirrors the repository binary-dataset and top-k CSV contracts on the Python side for Phase 8 helpers
+
+## `scripts/faiss_compare.py`
+
+**Responsibility**
+
+- runs FAISS exact-flat search over existing binary datasets and writes canonical Phase 8 top-k plus run-metrics outputs
+
+## `scripts/prepare_squad_minilm.py`
+
+**Responsibility**
+
+- converts local SQuAD parquet inputs into normalized binary memory/query vectors and a matching `metadata.tsv`
+
+## `scripts/run_faiss_comparison.sh`
+
+**Responsibility**
+
+- orchestrates sequential, parallel, and FAISS comparison runs over both synthetic data and the current SQuAD + MiniLM real-corpus path
+
 ## Test Files in `tests/`
 
 ## `tests/ConfigLoggerTest.cpp`
@@ -1028,6 +1214,18 @@ Use this file when you want to answer: "What exactly is this file responsible fo
 
 - validates the reduced-profile end-to-end benchmark automation and figure generation flow
 
+## `tests/cmake/RunFaissComparisonTableSmoke.cmake`
+
+**Responsibility**
+
+- validates the Phase 8 comparison-table builder against tiny fixture CSV inputs
+
+## `tests/cmake/RunFaissComparisonWorkflowSmoke.cmake`
+
+**Responsibility**
+
+- validates the reduced-profile Phase 8 orchestration flow with synthetic data plus a prebuilt tiny real-corpus fixture
+
 ## Build File
 
 ## `CMakeLists.txt`
@@ -1087,6 +1285,11 @@ Use this file when you want to answer: "What exactly is this file responsible fo
   - `scripts/run_all_experiments.sh`
   - `scripts/benchmark_csv.py`
   - `scripts/plot_results.py`
+- Phase 8 external baseline workflow:
+  - `scripts/run_faiss_comparison.sh`
+  - `scripts/phase8_common.py`
+  - `scripts/faiss_compare.py`
+  - `scripts/prepare_squad_minilm.py`
 - executable behavior checks:
   - `tests/ConfigLoggerTest.cpp`
   - `tests/BinaryDatasetTest.cpp`
@@ -1098,7 +1301,7 @@ Use this file when you want to answer: "What exactly is this file responsible fo
 
 ## Suggested Maintenance Rule
 
-Now that Phase 7 is in place, update this document whenever one of these happens:
+Now that Phase 8 is in place, update this document whenever one of these happens:
 
 - a new executable is added
 - a header gains a new public type or function

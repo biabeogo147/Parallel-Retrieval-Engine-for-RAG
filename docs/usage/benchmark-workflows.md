@@ -1,6 +1,9 @@
 # Benchmark Workflows
 
-This guide covers the current synthetic benchmark automation layer.
+This guide covers both:
+
+- the current synthetic benchmark automation layer
+- the separate Phase 8 FAISS external-baseline workflow
 
 All commands below assume:
 
@@ -42,6 +45,11 @@ These are the current public script knobs exposed by `scripts/benchmark_common.s
 | `BENCH_P_LIST` | process counts used for the speedup sweep | generated as `1 2 4 ... X 2X` |
 | `BENCH_PLOT_VENV_DIR` | plotting virtual environment path | `$repo_root/.venv` |
 | `BENCH_PYTHON_STDLIB` | Python interpreter used for CSV helper scripts | `python3` |
+| `BENCH_FAISS_RESULTS_DIR` | output directory for Phase 8 FAISS artifacts | `$BENCH_RESULTS_DIR/faiss` |
+| `BENCH_SQUAD_INPUT_DIR` | SQuAD parquet input root for Phase 8 real-corpus conversion | `/mnt/e/data/squad/plain_text` |
+| `BENCH_SQUAD_OUTPUT_DIR` | converted real-corpus output directory for Phase 8 | `$repo_root/.cache/real_corpora/squad_minilm` |
+| `BENCH_SQUAD_MODEL` | embedding model used by `prepare_squad_minilm.py` | `sentence-transformers/all-MiniLM-L6-v2` |
+| `BENCH_SQUAD_QUERIES_LIMIT` | number of validation questions kept for the current real-corpus run | `100` |
 
 ## `benchmark_selection.env`
 
@@ -100,6 +108,7 @@ bash ./scripts/run_all_experiments.sh
 **Next step**
 
 - Inspect the generated CSVs with [results-csv-reference.md](results-csv-reference.md), or re-run with a reduced custom profile.
+- If you also need the Phase 8 external baseline, run `bash ./scripts/run_faiss_comparison.sh` afterward.
 
 ## 2. Stage: Runtime-By-N Selection
 
@@ -247,8 +256,130 @@ bash ./scripts/run_all_experiments.sh
 
 - Compare the smoke profile outputs with the default profile outputs, using [results-csv-reference.md](results-csv-reference.md) to interpret each CSV schema.
 
+## 7. Phase 8 FAISS Comparison Workflow
+
+This workflow is separate from `run_all_experiments.sh`. The synthetic benchmark pipeline remains the canonical speedup and granularity path, while Phase 8 adds an external-baseline comparison path.
+
+**Prerequisites**
+
+- Debug binaries already exist.
+- `python3` is available inside WSL.
+- For the real-corpus path, `/mnt/e/data/squad/plain_text` exists or `BENCH_SQUAD_OUTPUT_DIR` already contains prebuilt `vectors.bin` and `queries.bin`.
+- On the first real-corpus run, the script may need network access to install Python packages and download the embedding model.
+
+**Bash**
+
+```bash
+bash ./scripts/run_faiss_comparison.sh
+```
+
+**Expected artifacts**
+
+- `results/faiss/synthetic_topk.csv`
+- `results/faiss/synthetic_run_metrics.csv`
+- `results/faiss/synthetic_correctness.csv`
+- `results/faiss/squad_topk.csv`
+- `results/faiss/squad_run_metrics.csv`
+- `results/faiss/squad_correctness.csv`
+- `results/faiss/comparison.csv`
+
+**What success looks like**
+
+- The script prints `Wrote ...` lines for all seven Phase 8 artifacts.
+- `results/faiss/synthetic_correctness.csv` is all `PASS`.
+- `results/faiss/squad_correctness.csv` is all `PASS`.
+- `results/faiss/comparison.csv` contains two data rows:
+  - `synthetic`
+  - `squad_minilm`
+
+**Next step**
+
+- Open [results-csv-reference.md](results-csv-reference.md) and read the `results/faiss/*.csv` sections before writing report notes or sharing benchmark conclusions.
+
+## 8. Direct Real-Corpus Preparation Command
+
+Use this when you want to prepare the current maintained SQuAD + MiniLM dataset explicitly instead of letting `run_faiss_comparison.sh` do it lazily.
+
+**Prerequisites**
+
+- `/mnt/e/data/squad/plain_text` exists.
+- `python3` is available.
+- The first run may need network access for Python dependencies and the embedding model.
+
+**Bash**
+
+```bash
+python3 ./scripts/prepare_squad_minilm.py \
+  --input-dir /mnt/e/data/squad/plain_text \
+  --output-dir .cache/real_corpora/squad_minilm \
+  --model sentence-transformers/all-MiniLM-L6-v2 \
+  --queries-limit 100
+```
+
+**Expected artifacts**
+
+- `.cache/real_corpora/squad_minilm/vectors.bin`
+- `.cache/real_corpora/squad_minilm/queries.bin`
+- `.cache/real_corpora/squad_minilm/metadata.tsv`
+
+**What success looks like**
+
+- The script prints `Wrote .../vectors.bin`, `Wrote .../queries.bin`, and `Wrote .../metadata.tsv`.
+- It also prints the number of contexts, queries, and the embedding dimension.
+
+**Next step**
+
+- Run `bash ./scripts/run_faiss_comparison.sh` to compare sequential, parallel, and FAISS on both synthetic data and the prepared real corpus.
+
+## 9. Reduced Or Customized Phase 8 Run
+
+Use this pattern when you want to redirect Phase 8 outputs into a separate folder or reuse a custom prebuilt real-corpus directory.
+
+**Prerequisites**
+
+- Debug binaries already exist.
+- If `BENCH_SQUAD_OUTPUT_DIR` already contains `vectors.bin` and `queries.bin`, the script will reuse them and skip embedding generation.
+
+**Bash**
+
+```bash
+BENCH_D=8 \
+BENCH_Q=5 \
+BENCH_TOPK=3 \
+BENCH_N_CANDIDATES="64" \
+BENCH_P_SELECTED=4 \
+BENCH_P_LIST="2 4" \
+BENCH_RESULTS_DIR=results/faiss-smoke \
+BENCH_FAISS_RESULTS_DIR=results/faiss-smoke/faiss \
+BENCH_SCRATCH_DIR=.cache/benchmarks-faiss-smoke \
+BENCH_SQUAD_OUTPUT_DIR=.cache/real_corpora/squad_minilm_smoke \
+bash ./scripts/run_faiss_comparison.sh
+```
+
+**Expected artifacts**
+
+- `results/faiss-smoke/faiss/synthetic_topk.csv`
+- `results/faiss-smoke/faiss/synthetic_run_metrics.csv`
+- `results/faiss-smoke/faiss/synthetic_correctness.csv`
+- `results/faiss-smoke/faiss/squad_topk.csv`
+- `results/faiss-smoke/faiss/squad_run_metrics.csv`
+- `results/faiss-smoke/faiss/squad_correctness.csv`
+- `results/faiss-smoke/faiss/comparison.csv`
+
+**What success looks like**
+
+- The custom Phase 8 outputs appear under `results/faiss-smoke/faiss/`.
+- The default `results/faiss/` directory is left untouched.
+
+**Next step**
+
+- Compare the custom output tables with the default profile, again using [results-csv-reference.md](results-csv-reference.md) to interpret the schemas.
+
 ## Notes
 
 - `run_all_experiments.sh` is the only script that bootstraps the plotting virtual environment and generates figures.
 - The stage scripts reuse or generate synthetic datasets under the benchmark scratch directory automatically.
 - If you change `BENCH_RESULTS_DIR` or `BENCH_SCRATCH_DIR`, remember to inspect or clean those custom paths later instead of the defaults.
+- `run_all_experiments.sh` remains synthetic-only by design.
+- `run_faiss_comparison.sh` reuses the same `.venv/` directory for FAISS and real-corpus conversion dependencies.
+- If `BENCH_SQUAD_OUTPUT_DIR` already contains binary outputs, `run_faiss_comparison.sh` skips the expensive embedding-preparation step and reuses them directly.

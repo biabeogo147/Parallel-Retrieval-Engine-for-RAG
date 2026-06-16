@@ -1,0 +1,3 @@
+-r requirements-faiss.txt
+pyarrow>=16,<22
+sentence-transformers>=5,<6

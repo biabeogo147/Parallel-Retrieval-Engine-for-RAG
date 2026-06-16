@@ -435,6 +435,9 @@ The automation layer now provides:
 - `scripts/run_all_experiments.sh`
   - runs the four benchmark stages
   - creates `results/figures/*.png`
+- `scripts/run_faiss_comparison.sh`
+  - runs the Phase 8 sequential / parallel / FAISS comparison workflow
+  - creates `results/faiss/*.csv`
 
 Default benchmark knobs are controlled by environment variables:
 
@@ -448,10 +451,86 @@ Default benchmark knobs are controlled by environment variables:
 - `BENCH_BUILD_DIR`
 - `BENCH_RESULTS_DIR`
 - `BENCH_SCRATCH_DIR`
+- `BENCH_FAISS_RESULTS_DIR`
+- `BENCH_SQUAD_INPUT_DIR`
+- `BENCH_SQUAD_OUTPUT_DIR`
+- `BENCH_SQUAD_MODEL`
+- `BENCH_SQUAD_QUERIES_LIMIT`
 
-The plotting step bootstraps a repo-local `.venv/` and installs `matplotlib` on first use if it is not already available.
+The repo-local `.venv/` is now reused for both:
+
+- Phase 7 plotting dependencies such as `matplotlib`
+- Phase 8 Python dependencies such as `faiss-cpu`, `pyarrow`, and `sentence-transformers`
 
 Use the repository-local `data/` directory for synthetic outputs produced by development and smoke checks. Reserve `/mnt/e/data` for larger external benchmark corpora and converted real datasets added in later phases.
+
+## Phase 8 FAISS External Baseline Flow
+
+Phase 8 adds a separate comparison workflow on top of the existing synthetic benchmark stack. It does not replace `run_all_experiments.sh`; instead, it adds a distinct script for FAISS-based external baseline comparison.
+
+Run the full Phase 8 comparison flow from WSL:
+
+```bash
+bash ./scripts/run_faiss_comparison.sh
+```
+
+The orchestration script now performs:
+
+- synthetic dataset reuse or generation through the existing Phase 7 benchmark helpers
+- exact sequential retrieval to produce the reference top-k CSV
+- exact MPI retrieval to produce the parallel run-summary CSV used in the comparison table
+- FAISS `IndexFlatIP` search over the same normalized binary vectors
+- correctness verification between `sequential_retriever` and the FAISS top-k output
+- one real-corpus path based on `SQuAD + sentence-transformers/all-MiniLM-L6-v2`
+- final aggregation into `results/faiss/comparison.csv`
+
+If `BENCH_SQUAD_OUTPUT_DIR` does not already contain:
+
+- `vectors.bin`
+- `queries.bin`
+
+then `run_faiss_comparison.sh` calls `prepare_squad_minilm.py` automatically to create them from:
+
+- `BENCH_SQUAD_INPUT_DIR`
+- `BENCH_SQUAD_MODEL`
+- `BENCH_SQUAD_QUERIES_LIMIT`
+
+Typical direct real-corpus preparation command:
+
+```bash
+python3 ./scripts/prepare_squad_minilm.py \
+  --input-dir /mnt/e/data/squad/plain_text \
+  --output-dir .cache/real_corpora/squad_minilm \
+  --model sentence-transformers/all-MiniLM-L6-v2 \
+  --queries-limit 100
+```
+
+Typical direct FAISS comparison command on any already-prepared binary dataset pair:
+
+```bash
+python3 ./scripts/faiss_compare.py \
+  --dataset-name synthetic \
+  --vectors data/memory_vectors.bin \
+  --queries data/query_vectors.bin \
+  --topk 10 \
+  --threads 4 \
+  --output-topk results/faiss/synthetic_topk.csv \
+  --output-metrics results/faiss/synthetic_run_metrics.csv
+```
+
+The Phase 8 artifact set is:
+
+- `results/faiss/synthetic_topk.csv`
+- `results/faiss/synthetic_run_metrics.csv`
+- `results/faiss/synthetic_correctness.csv`
+- `results/faiss/squad_topk.csv`
+- `results/faiss/squad_run_metrics.csv`
+- `results/faiss/squad_correctness.csv`
+- `results/faiss/comparison.csv`
+
+The real-corpus conversion cache is stored under:
+
+- `.cache/real_corpora/squad_minilm/`
 
 ## Generated Artifacts
 
@@ -461,7 +540,8 @@ Generated files should stay inside these locations:
 - local synthetic datasets produced by the current pipeline: `data/`
 - benchmark outputs produced by the current pipeline: `results/`
 - benchmark scratch/cache files: `.cache/benchmarks/`
-- plotting runtime and dependencies: `.venv/`
+- converted Phase 8 real-corpus binaries and metadata: `.cache/real_corpora/`
+- plotting and Phase 8 Python runtime dependencies: `.venv/`
 
 Do not commit generated content from `build/`, `data/`, or `results/`.
 
@@ -526,7 +606,7 @@ Small executable or script-based checks used by `CTest`.
 - `CorrectnessCheckerTest.cpp`: correctness comparison validation and failure cases
 - `tests/cmake/*.cmake`: CLI smoke, determinism, sequential checks, blocking MPI end-to-end checks, correctness-check workflow checks, and benchmark automation smoke checks
 
-Later phases may add real-text conversion checks, metadata-backed demo checks, and report-oriented validation here.
+Later phases may still add broader real-text corpus checks, alternate-baseline checks, metadata-backed demo checks, and report-oriented validation here.
 
 ### `scripts/`
 
@@ -542,9 +622,15 @@ POSIX shell helpers intended to run inside Ubuntu WSL.
 - `run_granularity.sh`: granularity/load-balancing benchmark stage
 - `run_speedup.sh`: speedup benchmark stage
 - `run_all_experiments.sh`: one-command synthetic benchmark orchestration
+- `run_faiss_comparison.sh`: Phase 8 orchestration for sequential / parallel / FAISS comparison
 - `benchmark_csv.py`: run-summary aggregation and manifest helpers
+- `phase8_common.py`: shared binary-format and CSV helpers for the Phase 8 Python scripts
 - `plot_results.py`: headless benchmark figure generation
 - `requirements-benchmark.txt`: plotting dependency list for the benchmark venv
+- `faiss_compare.py`: FAISS exact-flat comparison tool for already-prepared binary datasets
+- `prepare_squad_minilm.py`: SQuAD parquet to normalized binary-vector conversion tool
+- `requirements-faiss.txt`: minimal Phase 8 FAISS comparison dependency set
+- `requirements-phase8.txt`: extended Phase 8 dependency set for real-corpus conversion
 
 ### `tools/`
 
@@ -563,6 +649,13 @@ Local generated datasets produced during development. This directory is kept in 
 ### `results/`
 
 Local CSVs, benchmark tables, and other generated outputs. Like `data/`, this stays mostly untracked.
+
+Phase 8 also adds a nested `results/faiss/` artifact set for:
+
+- FAISS top-k CSV outputs
+- FAISS run-metrics CSV outputs
+- FAISS correctness CSV outputs
+- the final parallel-versus-FAISS comparison table
 
 ### `docs/development/`
 

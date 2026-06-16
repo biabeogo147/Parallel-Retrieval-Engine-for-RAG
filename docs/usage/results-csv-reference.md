@@ -1,6 +1,6 @@
 # Results CSV Reference
 
-This guide explains the CSV files written under `results/` by the current synthetic retrieval and benchmark pipeline.
+This guide explains the CSV files written under `results/` by the current retrieval, benchmark, and Phase 8 FAISS comparison pipeline.
 
 Use this document when you need to answer questions like:
 
@@ -24,6 +24,13 @@ This guide covers the current CSV outputs:
 - `runtime_by_N.csv`
 - `granularity.csv`
 - `speedup.csv`
+- `results/faiss/synthetic_topk.csv`
+- `results/faiss/synthetic_run_metrics.csv`
+- `results/faiss/synthetic_correctness.csv`
+- `results/faiss/squad_topk.csv`
+- `results/faiss/squad_run_metrics.csv`
+- `results/faiss/squad_correctness.csv`
+- `results/faiss/comparison.csv`
 
 Related non-CSV outputs such as `benchmark_selection.env`, `granularity_summary.txt`, and `results/figures/*.png` are mentioned briefly at the end, but the main focus here is the CSV layer.
 
@@ -75,17 +82,21 @@ If you run the benchmark scripts with a custom `BENCH_RESULTS_DIR`, the filename
 | --- | --- | --- | --- |
 | `sequential_topk.csv` | `sequential_retriever` | one row per retrieved candidate | exact sequential retrieval output |
 | `parallel_topk.csv` | `parallel_retriever` | one row per retrieved candidate | exact MPI retrieval output |
+| `results/faiss/*_topk.csv` | `faiss_compare.py` | one row per retrieved candidate | exact FAISS external-baseline output |
 | `parallel_metrics.csv` | `parallel_retriever --metrics` | one row per MPI rank | detailed per-rank timing and load-balance data |
 | `correctness.csv` | `verify_results` | one row per query | sequential-versus-parallel correctness verdict |
+| `results/faiss/*_correctness.csv` | `verify_results` | one row per query | sequential-versus-FAISS correctness verdict |
 | `sequential_run_metrics.csv` | `sequential_retriever --run-metrics` | one row per run | benchmark summary for one sequential run |
 | `parallel_run_metrics.csv` | `parallel_retriever --run-metrics` | one row per run | benchmark summary for one parallel run |
 | `runtime_by_N.csv` | `run_select_N.sh` | one row per tested `N` value | runtime sweep used to choose `N_SELECTED` |
 | `granularity.csv` | `run_granularity.sh` | one row per MPI rank | canonical per-rank benchmark metrics artifact |
 | `speedup.csv` | `run_speedup.sh` | one row per process count `P` | final speedup and efficiency table |
+| `results/faiss/*_run_metrics.csv` | `faiss_compare.py` | one row per run | Phase 8 FAISS run-summary table |
+| `results/faiss/comparison.csv` | `benchmark_csv.py build-faiss-comparison` | one row per dataset | final parallel-versus-FAISS comparison table |
 
-## 1. `sequential_topk.csv` And `parallel_topk.csv`
+## 1. `sequential_topk.csv`, `parallel_topk.csv`, And `results/faiss/*_topk.csv`
 
-These two files share the same schema and the same interpretation rules.
+These files share the same schema and the same interpretation rules.
 
 ### What these files represent
 
@@ -234,6 +245,10 @@ For a valid top-k CSV:
   - use as the exact single-process reference output
 - `parallel_topk.csv`
   - use as the exact MPI output to compare against the sequential reference
+- `results/faiss/synthetic_topk.csv`
+  - use as the exact FAISS output for the synthetic binary dataset
+- `results/faiss/squad_topk.csv`
+  - use as the exact FAISS output for the current `SQuAD + MiniLM` real-corpus binary dataset
 
 ## 2. `parallel_metrics.csv` And `granularity.csv`
 
@@ -428,11 +443,11 @@ Use these comparisons:
 - `granularity.csv`
   - the canonical benchmark artifact used by `run_granularity.sh`
 
-## 3. `correctness.csv`
+## 3. `correctness.csv` And `results/faiss/*_correctness.csv`
 
 ### What this file represents
 
-This file summarizes whether the parallel output matches the sequential reference for each query.
+These files summarize whether another top-k output matches the sequential reference for each query.
 
 It is produced by `verify_results`.
 
@@ -443,6 +458,15 @@ query_id,k,matched,matched_ids,max_score_diff,status
 ```
 
 Each row corresponds to one query, not one retrieved candidate.
+
+Which concrete comparison is being reported depends on the workflow:
+
+- `correctness.csv`
+  - sequential versus parallel
+- `results/faiss/synthetic_correctness.csv`
+  - sequential versus FAISS on the selected synthetic dataset
+- `results/faiss/squad_correctness.csv`
+  - sequential versus FAISS on the current `SQuAD + MiniLM` real-corpus dataset
 
 ### Column-by-column explanation
 
@@ -506,7 +530,7 @@ Each row corresponds to one query, not one retrieved candidate.
 
 **Meaning**
 
-- number of rank positions where sequential and parallel outputs have the same `memory_id`
+- number of rank positions where the sequential reference and the comparison output have the same `memory_id`
 
 **How to read it**
 
@@ -525,7 +549,7 @@ Each row corresponds to one query, not one retrieved candidate.
 
 **Meaning**
 
-- largest absolute score difference between aligned sequential and parallel rows for that query
+- largest absolute score difference between aligned sequential rows and comparison rows for that query
 
 **Formula**
 
@@ -567,7 +591,8 @@ max_score_diff = max(abs(seq.score - par.score))
 - if one or more rows are `FAIL`, inspect:
   - `matched_ids`
   - `max_score_diff`
-  - the underlying `sequential_topk.csv` and `parallel_topk.csv`
+  - the underlying sequential top-k CSV
+  - the corresponding comparison top-k CSV
 
 ## 4. `sequential_run_metrics.csv`, `parallel_run_metrics.csv`, And `runtime_by_N.csv`
 
@@ -896,6 +921,438 @@ Look for these patterns:
   - communication is becoming a limiting factor
 - `efficiency` drops as `P` grows
   - expected to some degree, but large drops are a sign of overhead or imbalance
+
+## 6. `results/faiss/*_run_metrics.csv`
+
+These files are the Phase 8 FAISS run-summary tables.
+
+The current maintained files are:
+
+- `results/faiss/synthetic_run_metrics.csv`
+- `results/faiss/squad_run_metrics.csv`
+
+The exact header is:
+
+```text
+dataset_name,N,D,Q,k,threads,build_time,compute_time,total_time
+```
+
+### What these files represent
+
+Each file contains one row describing one FAISS exact-flat invocation over one binary memory/query dataset pair.
+
+They are not per-rank tables and they are not candidate tables.
+
+They exist so the project can compare its custom MPI retriever with an external library baseline while keeping the timing policy explicit.
+
+### Column-by-column explanation
+
+#### `dataset_name`
+
+**Type**
+
+- text
+
+**Meaning**
+
+- logical dataset label chosen by the workflow
+
+**Current expected values**
+
+- `synthetic`
+- `squad_minilm`
+
+**How to read it**
+
+- it tells you which dataset family the row belongs to
+- it is the join key used later in `results/faiss/comparison.csv`
+
+#### `N`
+
+**Type**
+
+- integer
+
+**Meaning**
+
+- number of memory vectors indexed by FAISS
+
+**How to read it**
+
+- larger `N` means a larger FAISS database
+
+#### `D`
+
+**Type**
+
+- integer
+
+**Meaning**
+
+- vector dimension used by the FAISS index
+
+**How to read it**
+
+- for the current SQuAD + MiniLM path, this is expected to be `384`
+
+#### `Q`
+
+**Type**
+
+- integer
+
+**Meaning**
+
+- number of query vectors searched against the index
+
+**How to read it**
+
+- this should match the query count used by the sequential and parallel comparison runs on the same dataset
+
+#### `k`
+
+**Type**
+
+- integer
+
+**Meaning**
+
+- requested top-k value passed to FAISS search
+
+**How to read it**
+
+- this should match the retrieval depth used by the project retrievers for the same comparison row
+
+#### `threads`
+
+**Type**
+
+- integer
+
+**Meaning**
+
+- FAISS OpenMP thread count used during the run
+
+**How to read it**
+
+- this is the Phase 8 thread-side analogue of MPI worker count
+- the current workflow sets it from the same canonical selection as `P_SELECTED`
+
+#### `build_time`
+
+**Type**
+
+- floating-point seconds
+
+**Meaning**
+
+- time spent constructing the FAISS flat index contents
+
+**Current boundary**
+
+- measured around `IndexFlatIP.add(...)`
+
+**How to read it**
+
+- this is the cold-start indexing cost
+- it is reported for fairness discussion, but it is not folded into the current canonical `total_time`
+
+#### `compute_time`
+
+**Type**
+
+- floating-point seconds
+
+**Meaning**
+
+- time spent performing the FAISS search
+
+**Current boundary**
+
+- measured around `IndexFlatIP.search(...)`
+
+**How to read it**
+
+- this is the core number used to compare FAISS runtime against the project retriever runtime in Phase 8
+
+#### `total_time`
+
+**Type**
+
+- floating-point seconds
+
+**Meaning**
+
+- canonical FAISS timing used in the final comparison table
+
+**Current rule**
+
+- `total_time = compute_time`
+
+**How to read it**
+
+- Phase 8 intentionally excludes FAISS build cost from the main denominator so the external comparison lines up with the retrieval-only timing window already used by the project retrievers
+
+### How to interpret these files
+
+- use `synthetic_run_metrics.csv` when you want the external-baseline timing on the selected synthetic dataset
+- use `squad_run_metrics.csv` when you want the external-baseline timing on the converted real corpus
+- compare these rows against `parallel_run_metrics.csv` only through the controlled aggregation in `results/faiss/comparison.csv`
+
+## 7. `results/faiss/comparison.csv`
+
+### What this file represents
+
+This is the final Phase 8 comparison table.
+
+Each row compares:
+
+- one project parallel run summary
+- one FAISS run summary
+- one correctness CSV summary
+
+for one dataset family.
+
+The exact header is:
+
+```text
+dataset_name,N,D,Q,k,parallel_workers,faiss_threads,parallel_compute_time,parallel_communication_time,parallel_total_time,faiss_build_time,faiss_compute_time,faiss_total_time,total_ratio,correctness_status,max_score_diff
+```
+
+### Column-by-column explanation
+
+#### `dataset_name`
+
+**Type**
+
+- text
+
+**Meaning**
+
+- logical dataset label for the comparison row
+
+**Current expected values**
+
+- `synthetic`
+- `squad_minilm`
+
+#### `N`
+
+**Type**
+
+- integer
+
+**Meaning**
+
+- number of memory vectors used by both the project retriever and FAISS for this row
+
+#### `D`
+
+**Type**
+
+- integer
+
+**Meaning**
+
+- shared vector dimension used by both systems for this row
+
+#### `Q`
+
+**Type**
+
+- integer
+
+**Meaning**
+
+- shared query count used by both systems for this row
+
+#### `k`
+
+**Type**
+
+- integer
+
+**Meaning**
+
+- shared top-k value used by both systems for this row
+
+#### `parallel_workers`
+
+**Type**
+
+- integer
+
+**Meaning**
+
+- MPI worker count used by `parallel_retriever`
+
+**How to read it**
+
+- this is the project-side parallelism value
+
+#### `faiss_threads`
+
+**Type**
+
+- integer
+
+**Meaning**
+
+- FAISS OpenMP thread count
+
+**How to read it**
+
+- this is the baseline-side parallelism value
+- the current workflow keeps it aligned with the selected worker-count policy, but the column still appears explicitly so report tables stay honest
+
+#### `parallel_compute_time`
+
+**Type**
+
+- floating-point seconds
+
+**Meaning**
+
+- project parallel run-summary compute time for this dataset
+
+**Current rule**
+
+- copied from the Phase 6/7 parallel run-summary row
+
+#### `parallel_communication_time`
+
+**Type**
+
+- floating-point seconds
+
+**Meaning**
+
+- project parallel run-summary communication time for this dataset
+
+**How to read it**
+
+- this shows the MPI overhead that FAISS does not have in the same form
+
+#### `parallel_total_time`
+
+**Type**
+
+- floating-point seconds
+
+**Meaning**
+
+- project parallel run-summary total retrieval time for this dataset
+
+**How to read it**
+
+- this is the project-side denominator used in the final total-runtime ratio
+
+#### `faiss_build_time`
+
+**Type**
+
+- floating-point seconds
+
+**Meaning**
+
+- FAISS index-construction cost for this dataset
+
+**How to read it**
+
+- use this when discussing cold-start tradeoffs
+- do not mix it into the main total-runtime ratio unless you are intentionally doing a separate cold-start analysis
+
+#### `faiss_compute_time`
+
+**Type**
+
+- floating-point seconds
+
+**Meaning**
+
+- FAISS search cost for this dataset
+
+#### `faiss_total_time`
+
+**Type**
+
+- floating-point seconds
+
+**Meaning**
+
+- canonical FAISS total time for the Phase 8 comparison
+
+**Current rule**
+
+- equal to `faiss_compute_time`
+
+#### `total_ratio`
+
+**Type**
+
+- floating-point number
+
+**Meaning**
+
+- relative runtime ratio between the project parallel path and the FAISS baseline
+
+**Formula**
+
+```text
+total_ratio = parallel_total_time / faiss_total_time
+```
+
+**How to read it**
+
+- values above `1.0` mean the project parallel path was slower than FAISS on this comparison window
+- values below `1.0` mean the project parallel path was faster than FAISS on this comparison window
+- values near `1.0` mean the two paths had similar runtime on the chosen metric
+
+#### `correctness_status`
+
+**Type**
+
+- text
+
+**Meaning**
+
+- dataset-level correctness verdict derived from the corresponding correctness CSV
+
+**Current values**
+
+- `PASS`
+- `FAIL`
+
+**How it is formed**
+
+- `PASS` only if every query row in the corresponding correctness CSV is `PASS`
+
+#### `max_score_diff`
+
+**Type**
+
+- floating-point number
+
+**Meaning**
+
+- largest score difference observed anywhere in the corresponding correctness CSV
+
+**How to read it**
+
+- smaller is better
+- `0` means the compared outputs matched exactly at the checked score precision
+
+### How to interpret the whole table
+
+Use each row as one report-ready comparison unit.
+
+For example:
+
+- if `correctness_status = PASS`, the FAISS output matched the sequential reference under the current deterministic ordering contract
+- if `total_ratio > 1`, the project parallel path took longer than FAISS on the same dataset and timing window
+- if `faiss_build_time` is large but `faiss_total_time` is small, FAISS has low steady-state search cost but non-trivial cold-start indexing cost
+
+This file is usually the best single CSV to quote when you need one compact answer to: "How did the custom MPI retriever compare with FAISS on the maintained datasets?"
 
 ## Related Non-CSV Outputs In `results/`
 

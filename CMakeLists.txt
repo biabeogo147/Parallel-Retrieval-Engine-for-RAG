@@ -364,4 +364,25 @@ if(BUILD_TESTING)
             -P
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/RunBenchmarkAllExperimentsSmoke.cmake
     )
+    add_test(
+        NAME benchmark_faiss_comparison_table_smoke
+        COMMAND
+            ${CMAKE_COMMAND}
+            -DREPO_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/phase8_faiss_table_smoke
+            -P
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/RunFaissComparisonTableSmoke.cmake
+    )
+    add_test(
+        NAME benchmark_faiss_comparison_workflow_smoke
+        COMMAND
+            ${CMAKE_COMMAND}
+            -DREPO_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -DBUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}
+            -DGENERATE_VECTORS=$<TARGET_FILE:generate_vectors>
+            -DGENERATE_QUERIES=$<TARGET_FILE:generate_queries>
+            -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/phase8_faiss_workflow_smoke
+            -P
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/RunFaissComparisonWorkflowSmoke.cmake
+    )
 endif()

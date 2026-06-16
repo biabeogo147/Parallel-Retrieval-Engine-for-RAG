@@ -53,11 +53,13 @@ cd ~/work/Parallel-Retrieval-Engine-for-RAG
 - `data/`
   - local synthetic dataset files such as `memory_vectors.bin` and `query_vectors.bin`
 - `results/`
-  - top-k CSV outputs, correctness CSVs, benchmark tables, selection manifest, and generated figures
+  - top-k CSV outputs, correctness CSVs, benchmark tables, selection manifest, generated figures, and Phase 8 `results/faiss/` artifacts
 - `.cache/benchmarks/`
   - scratch benchmark datasets and intermediate CSV files created by the automation scripts
+- `.cache/real_corpora/`
+  - converted real-corpus binaries and metadata created by the current `SQuAD + MiniLM` Phase 8 workflow
 - `.venv/`
-  - repo-local Python virtual environment used by benchmark plotting
+  - repo-local Python virtual environment used by benchmark plotting and Phase 8 Python dependencies such as FAISS and sentence-transformers
 
 ## Deeper Technical References
 
@@ -79,5 +81,5 @@ If you want the shortest successful path:
 1. Follow [getting-started-wsl.md](getting-started-wsl.md).
 2. Run the small synthetic flow in [retrieval-workflows.md](retrieval-workflows.md).
 3. Read [results-csv-reference.md](results-csv-reference.md) to understand the generated outputs.
-4. When that works, move to [benchmark-workflows.md](benchmark-workflows.md).
+4. When that works, move to [benchmark-workflows.md](benchmark-workflows.md), including the separate FAISS comparison workflow if you need the Phase 8 baseline path.
 5. If anything fails, check [troubleshooting.md](troubleshooting.md).

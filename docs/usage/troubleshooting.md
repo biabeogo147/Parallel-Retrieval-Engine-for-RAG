@@ -120,16 +120,18 @@ If you want to verify the common command surface afterward:
 
 - The missing binary now exists under `build/debug/`.
 
-## Benchmark Plotting Spends Time Creating `.venv/`
+## Benchmark Plotting Or Phase 8 FAISS Setup Spends Time Creating `.venv/`
 
 **Symptoms**
 
 - `run_all_experiments.sh` pauses while installing Python packages
+- `run_faiss_comparison.sh` pauses while installing Python packages
 - `.venv/` appears at the repo root
 
 **Why this happens**
 
 - The benchmark figure generation step bootstraps a repo-local Python virtual environment if one does not already exist.
+- Phase 8 also reuses that same `.venv/` for `faiss-cpu`, `pyarrow`, and `sentence-transformers` when needed.
 - `matplotlib` is installed there the first time plotting is needed.
 
 **What to do**
@@ -143,6 +145,67 @@ Optional override:
 BENCH_PLOT_VENV_DIR=.venv-custom bash ./scripts/run_all_experiments.sh
 ```
 
+For Phase 8, the same override path applies because `run_faiss_comparison.sh` reuses `BENCH_PLOT_VENV_DIR`.
+
+## `run_faiss_comparison.sh` Cannot Find SQuAD Input Files
+
+**Symptoms**
+
+- the script reports a missing directory under `/mnt/e/data/squad/plain_text`
+- `prepare_squad_minilm.py` reports a missing `train-*.parquet` or `validation-*.parquet`
+
+**Fix**
+
+Confirm the expected input path exists:
+
+```bash
+ls /mnt/e/data/squad/plain_text
+```
+
+If your SQuAD copy lives elsewhere, override the input root:
+
+```bash
+BENCH_SQUAD_INPUT_DIR=/your/custom/squad/path \
+bash ./scripts/run_faiss_comparison.sh
+```
+
+If you already prepared compatible `vectors.bin` and `queries.bin`, point the workflow at that output directory instead:
+
+```bash
+BENCH_SQUAD_OUTPUT_DIR=.cache/real_corpora/squad_minilm \
+bash ./scripts/run_faiss_comparison.sh
+```
+
+**What success looks like**
+
+- the script either finds the parquet input files or reuses the prepared binary outputs without failing during startup
+
+## Phase 8 Model Download Or Python Dependency Bootstrap Takes Time
+
+**Symptoms**
+
+- `prepare_squad_minilm.py` pauses on first run
+- the first Phase 8 run uses network bandwidth
+- the terminal shows Python package installation or model download activity
+
+**Why this happens**
+
+- Phase 8 may need to install:
+  - `faiss-cpu`
+  - `numpy`
+  - `pyarrow`
+  - `sentence-transformers`
+- the first real-corpus run may also need to download `sentence-transformers/all-MiniLM-L6-v2`
+
+**What to do**
+
+- wait for the first run to complete
+- rerun the same command later; the repo-local `.venv/` and cached model files usually make later runs faster
+
+**What success looks like**
+
+- later Phase 8 runs spend much less time in environment bootstrap
+
 ## I Cannot Find The Generated Files
 
 Use these locations:
@@ -150,11 +213,13 @@ Use these locations:
 - `data/`
   - local synthetic `.bin` files used in manual retrieval workflows
 - `results/`
-  - final top-k CSVs, correctness CSV, benchmark tables, selection manifest, and figures
+  - final top-k CSVs, correctness CSVs, benchmark tables, selection manifest, figures, and `results/faiss/` outputs
 - `.cache/benchmarks/`
   - benchmark scratch datasets and intermediate outputs
+- `.cache/real_corpora/`
+  - converted real-corpus binaries and metadata for the Phase 8 workflow
 - `.venv/`
-  - plotting runtime environment
+  - plotting and Phase 8 Python runtime environment
 
 If you used custom benchmark environment variables, check those overridden paths instead of the defaults.
 
@@ -170,7 +235,9 @@ rm -rf build/debug build/release
 rm -f data/*.bin
 rm -f results/*.csv results/*.txt
 rm -rf results/figures
+rm -rf results/faiss
 rm -rf .cache/benchmarks
+rm -rf .cache/real_corpora
 rm -rf .venv
 ```
 

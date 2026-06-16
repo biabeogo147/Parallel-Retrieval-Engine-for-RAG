@@ -16,7 +16,7 @@ Project xây dựng một module truy hồi bộ nhớ dài hạn cho AI Agent. 
 
 > Cho một query embedding, tìm top-k memory embeddings có độ tương đồng cao nhất trong một kho bộ nhớ lớn.
 
-Module này phù hợp với AI Agent vì các agent hiện đại thường cần truy xuất lại thông tin đã lưu trong bộ nhớ dài hạn trước khi trả lời hoặc ra quyết định. Thay vì dùng thư viện có sẵn như FAISS làm lõi, project tự cài đặt exact top-k vector retrieval bằng C++ và song song hóa bằng MPI để thể hiện rõ kiến thức parallel computing.
+Module này phù hợp với AI Agent vì các agent hiện đại thường cần truy xuất lại thông tin đã lưu trong bộ nhớ dài hạn trước khi trả lời hoặc ra quyết định. Thay vì dùng thư viện có sẵn như FAISS làm lõi của implementation chính, project tự cài đặt exact top-k vector retrieval bằng C++ và song song hóa bằng MPI để thể hiện rõ kiến thức parallel computing, sau đó dùng FAISS như một external baseline để đối chiếu.
 
 ### Câu chốt scope
 
@@ -38,7 +38,7 @@ Project cần đạt các mục tiêu sau:
 6. Kiểm tra granularity và load balancing trên từng tiến trình.
 7. Đo speedup khi thay đổi số lượng tiến trình.
 8. Xuất kết quả benchmark ra CSV để vẽ biểu đồ trong report.
-9. Có demo nhỏ cho thấy module này có thể dùng như tầng memory retrieval trong AI Agent.
+9. Có external baseline comparison với FAISS exact flat trên synthetic benchmark và một real corpus đã convert.
 
 ### 1.2. Mục tiêu học thuật theo đề parallel computing
 
@@ -95,7 +95,16 @@ Các phần này không phải trọng tâm, có thể dùng thư viện hoặc 
 - PDF/DOCX parser
 - JSON parser
 - Web UI
-- FAISS/hnswlib baseline
+- FAISS exact flat CPU baseline
+```
+
+Trong plan này, FAISS chỉ được dùng ở vai trò:
+
+```text
+- External baseline để so sánh với implementation exact retrieval của project
+- CPU-only
+- Flat exact search với IndexFlatIP
+- Không dùng ANN như IVF/PQ/HNSW trong Phase 8 chính
 ```
 
 ### 2.3. Phần không nên làm trong bản chính
@@ -844,16 +853,32 @@ parallel-agent-memory-retriever/
 │   ├── run_correctness.sh
 │   ├── run_granularity.sh
 │   ├── run_speedup.sh
+│   ├── run_faiss_comparison.sh
+│   ├── faiss_compare.py
+│   ├── prepare_squad_minilm.py
 │   └── plot_results.py
 ├── data/
 │   ├── memory_vectors.bin
-│   ├── query_vectors.bin
-│   └── metadata.tsv
+│   └── query_vectors.bin
+├── .cache/
+│   └── real_corpora/
+│       └── squad_minilm/
+│           ├── vectors.bin
+│           ├── queries.bin
+│           └── metadata.tsv
 └── results/
     ├── runtime_by_N.csv
     ├── correctness.csv
     ├── granularity.csv
     ├── speedup.csv
+    ├── faiss/
+    │   ├── synthetic_topk.csv
+    │   ├── synthetic_run_metrics.csv
+    │   ├── synthetic_correctness.csv
+    │   ├── squad_topk.csv
+    │   ├── squad_run_metrics.csv
+    │   ├── squad_correctness.csv
+    │   └── comparison.csv
     └── figures/
 ```
 
@@ -1240,36 +1265,96 @@ bash scripts/run_all_experiments.sh
 
 ---
 
-## Phase 8 — Demo AI Agent memory retrieval
+## Phase 8 — FAISS external baseline comparison
 
 ### Việc cần làm
 
 ```text
-- Tạo metadata.tsv gồm memory_id và memory_text
-- Cho phép nhập query_id hoặc query vector
-- Hiển thị top-k memory text
-- Optional: ghép context thành prompt cho LLM/mock LLM
+- Viết scripts/faiss_compare.py để đọc vectors.bin và queries.bin theo binary contract hiện tại
+- Dùng FAISS IndexFlatIP trên CPU với input normalized, row-major, float32
+- Đo riêng build_time = IndexFlatIP.add(...) và compute_time = IndexFlatIP.search(...)
+- Khóa total_time của FAISS trong Phase 8 bằng compute_time để không trộn cold-start index build vào canonical speed comparison
+- Ghi top-k CSV của FAISS và run-metrics CSV của FAISS
+- Tái sử dụng verify_results để so sánh sequential output với FAISS output trên synthetic dataset
+- Viết scripts/prepare_squad_minilm.py để convert SQuAD thành vectors.bin, queries.bin, metadata.tsv
+- Dùng sentence-transformers/all-MiniLM-L6-v2 làm embedding model cố định cho SQuAD path
+- Chốt SQuAD path: unique context từ train split làm memory side, question từ validation split làm query side
+- Chốt queries-limit mặc định = 100 và dimension mặc định = 384 cho real-corpus path
+- Chốt thread policy: faiss.omp_set_num_threads(P_SELECTED) với P_SELECTED lấy từ benchmark manifest hiện tại
+- Viết scripts/run_faiss_comparison.sh để orchestration sequential / parallel / FAISS và sinh comparison.csv
+```
+
+### Contract cần khóa
+
+```text
+- Synthetic path tái sử dụng nguyên binary format Phase 2; không tạo format vector thứ hai
+- Correctness policy:
+  * dùng lại verify_results
+  * epsilon = 1e-5
+  * FAISS phải match exact sequential output trên cùng vector input
+- Fair timing policy:
+  * không tính text loading, text embedding generation, binary file loading, CSV writing vào benchmark window
+  * build_time = thời gian IndexFlatIP.add(...)
+  * compute_time = thời gian IndexFlatIP.search(...)
+  * total_time của FAISS trong Phase 8 = compute_time
+- Run-metrics schema:
+  * dataset_name,N,D,Q,k,threads,build_time,compute_time,total_time
+- Comparison schema:
+  * dataset_name,N,D,Q,k,parallel_workers,faiss_threads,parallel_compute_time,parallel_communication_time,parallel_total_time,faiss_build_time,faiss_compute_time,faiss_total_time,total_ratio,correctness_status,max_score_diff
+- Phase 6-7 contracts không đổi:
+  * speedup.csv vẫn dùng sequential baseline thật
+  * runtime_by_N.csv và granularity.csv giữ nguyên nghĩa
+  * FAISS comparison là experiment riêng
 ```
 
 ### Deliverables
 
 ```text
-src/main_demo.cpp
-data/metadata.tsv
+scripts/faiss_compare.py
+scripts/prepare_squad_minilm.py
+scripts/run_faiss_comparison.sh
+results/faiss/synthetic_topk.csv
+results/faiss/synthetic_run_metrics.csv
+results/faiss/synthetic_correctness.csv
+results/faiss/squad_topk.csv
+results/faiss/squad_run_metrics.csv
+results/faiss/squad_correctness.csv
+results/faiss/comparison.csv
 ```
 
 ### Acceptance criteria
 
 ```bash
-mpirun -np 4 ./agent_memory_demo --query-id 0 --topk 5
+python3 scripts/faiss_compare.py \
+  --vectors data/memory_vectors.bin \
+  --queries data/query_vectors.bin \
+  --topk 10 \
+  --threads "$P_SELECTED" \
+  --output-topk results/faiss/synthetic_topk.csv \
+  --output-metrics results/faiss/synthetic_run_metrics.csv
+
+./build/release/verify_results \
+  --sequential results/sequential_topk.csv \
+  --parallel results/faiss/synthetic_topk.csv \
+  --epsilon 1e-5 \
+  --output results/faiss/synthetic_correctness.csv
+
+python3 scripts/prepare_squad_minilm.py \
+  --input-dir /mnt/e/data/squad/plain_text \
+  --output-dir .cache/real_corpora/squad_minilm \
+  --model sentence-transformers/all-MiniLM-L6-v2 \
+  --queries-limit 100
+
+bash scripts/run_faiss_comparison.sh
 ```
 
-Output:
+Kết quả cần đạt:
 
 ```text
-Retrieved memories:
-1. memory_id=...
-2. memory_id=...
+- Không còn reference dư về Phase 8 demo cũ trong master plan
+- results/faiss/synthetic_correctness.csv phải PASS cho toàn bộ query
+- SQuAD conversion sinh ra normalized binary datasets tương thích retriever hiện tại
+- results/faiss/comparison.csv có đủ 2 row canonical: synthetic và squad_minilm
 ```
 
 ---
@@ -1302,59 +1387,103 @@ Report trả lời đủ toàn bộ yêu cầu đề.
 
 ---
 
-## 13. Dòng lệnh chạy demo và benchmark
+### Future work / appendix direction
+
+```text
+- metadata.tsv + memory_text demo cho qualitative retrieval
+- CLI nhỏ để xem top-k memory text cho một query cụ thể
+- Optional ghép retrieved context thành prompt cho LLM hoặc mock LLM
+```
+
+---
+
+## 13. Dòng lệnh chạy benchmark và FAISS baseline
 
 ### Build
 
 ```bash
-mkdir -p build
-cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
-make -j
+cd ~/work/Parallel-Retrieval-Engine-for-RAG
+./scripts/configure_release.sh
+cmake --build build/release
 ```
 
-### Generate dataset
+### Generate synthetic dataset
 
 ```bash
-./generate_vectors --N 1000000 --D 384 --output ../data/memory_vectors.bin
-./generate_queries --Q 100 --D 384 --output ../data/query_vectors.bin
+./build/release/generate_vectors --N 1000000 --D 384 --output data/memory_vectors.bin
+./build/release/generate_queries --Q 100 --D 384 --output data/query_vectors.bin
 ```
 
 ### Sequential baseline
 
 ```bash
-./sequential_retriever \
-  --vectors ../data/memory_vectors.bin \
-  --queries ../data/query_vectors.bin \
+./build/release/sequential_retriever \
+  --vectors data/memory_vectors.bin \
+  --queries data/query_vectors.bin \
   --topk 10 \
-  --output ../results/sequential_topk.csv
+  --output results/sequential_topk.csv
 ```
 
 ### Parallel retrieval
 
 ```bash
-mpirun -np 12 ./parallel_retriever \
-  --vectors ../data/memory_vectors.bin \
-  --queries ../data/query_vectors.bin \
+mpirun -np 12 ./build/release/parallel_retriever \
+  --vectors data/memory_vectors.bin \
+  --queries data/query_vectors.bin \
   --topk 10 \
-  --output ../results/parallel_topk.csv \
-  --metrics ../results/granularity.csv
+  --output results/parallel_topk.csv \
+  --metrics results/granularity.csv \
+  --run-metrics results/parallel_run_metrics.csv
 ```
 
 ### Verify correctness
 
 ```bash
-./verify_results \
-  --sequential ../results/sequential_topk.csv \
-  --parallel ../results/parallel_topk.csv \
+./build/release/verify_results \
+  --sequential results/sequential_topk.csv \
+  --parallel results/parallel_topk.csv \
   --epsilon 1e-5 \
-  --output ../results/correctness.csv
+  --output results/correctness.csv
 ```
 
 ### Run speedup benchmark
 
 ```bash
-bash ../scripts/run_speedup.sh
+bash ./scripts/run_speedup.sh
+```
+
+### Run FAISS synthetic comparison
+
+```bash
+python3 scripts/faiss_compare.py \
+  --vectors data/memory_vectors.bin \
+  --queries data/query_vectors.bin \
+  --topk 10 \
+  --threads 12 \
+  --output-topk results/faiss/synthetic_topk.csv \
+  --output-metrics results/faiss/synthetic_run_metrics.csv
+
+./build/release/verify_results \
+  --sequential results/sequential_topk.csv \
+  --parallel results/faiss/synthetic_topk.csv \
+  --epsilon 1e-5 \
+  --output results/faiss/synthetic_correctness.csv
+```
+
+### Prepare SQuAD + MiniLM real-corpus dataset
+
+```bash
+python3 scripts/prepare_squad_minilm.py \
+  --input-dir /mnt/e/data/squad/plain_text \
+  --output-dir .cache/real_corpora/squad_minilm \
+  --model sentence-transformers/all-MiniLM-L6-v2 \
+  --queries-limit 100
+```
+
+### Run full FAISS comparison workflow
+
+```bash
+bash ./scripts/run_faiss_comparison.sh
 ```
 
 ---
@@ -1380,10 +1509,12 @@ bash ../scripts/run_speedup.sh
 | 13 | Granularity and Per-process Timing Results |
 | 14 | Speedup Experiment Setup |
 | 15 | Speedup Results |
-| 16 | Discussion: communication overhead, scalability, bottlenecks |
-| 17 | Conclusion and Future Work |
+| 16 | External Baseline with FAISS: fairness policy, exact-match correctness, and synthetic comparison |
+| 17 | External Baseline with FAISS on SQuAD + MiniLM |
+| 18 | Discussion: communication overhead, scalability, external-baseline interpretation, bottlenecks |
+| 19 | Conclusion and Future Work |
 
-Nếu cần gọn hơn, có thể gộp trang 14-15 hoặc 16-17 để giữ trong 15 trang.
+Nếu cần gọn hơn, có thể gộp trang 14-15 hoặc 16-17 hoặc 18-19 để giữ trong 15 trang.
 
 ---
 
@@ -1446,10 +1577,13 @@ Nếu cần gọn hơn, có thể gộp trang 14-15 hoặc 16-17 để giữ tro
 | Runtime quá lâu | N quá lớn | Giảm N hoặc Q |
 | Parallel không nhanh hơn nhiều | Communication overhead hoặc memory bandwidth bottleneck | Tăng N, tăng Q, dùng query batch |
 | Kết quả parallel lệch sequential | Floating-point tie hoặc merge sai | Thêm tie-break rule, dùng epsilon |
+| FAISS không match exact output | Input không normalized hoặc output ordering khác | Giữ float32 normalized row-major và tái dùng verify_results với deterministic tie-break |
+| FAISS comparison không công bằng | Trộn text embedding hoặc binary load vào benchmark window | Chốt fairness policy: build/search riêng, loại text preprocessing, dataset load, CSV writing khỏi timing chính |
 | Load imbalance | Chia dữ liệu không đều hoặc I/O không đều | Dùng balanced block formula hoặc block-cyclic |
 | MPI gather local top-k phức tạp | Struct gửi qua MPI khó debug | Pack candidate thành array float/int đơn giản |
-| Code không đủ 1000 dòng | Scope quá nhỏ | Bổ sung generator, checker, CSV logger, scripts, demo |
-| Report bị hỏi RAG ở đâu | Retrieval không gắn với agent | Thêm demo metadata memory_text và giải thích long-term memory retrieval |
+| SQuAD preprocessing quá nặng hoặc khó tái lập | Dependency Python/embedding model chưa khóa | Chốt all-MiniLM-L6-v2, queries-limit mặc định 100, và workflow WSL-first qua prepare_squad_minilm.py |
+| Code không đủ 1000 dòng | Scope quá nhỏ | Bổ sung baseline scripts, real-corpus conversion, comparison.csv, và doc/report analysis layer |
+| Report bị hỏi RAG ở đâu | Retrieval không gắn với hệ sinh thái thực tế | Nhấn mạnh project tập trung retrieval kernel và có external FAISS baseline thay vì full agent demo |
 
 ---
 
@@ -1467,16 +1601,19 @@ Các quyết định nên ghi cố định trong report:
 7. Bản chính dùng blocking MPI collectives để dễ tái lập kết quả.
 8. Load balancing được kiểm tra bằng per-rank compute/communication/idle time.
 9. Speedup được đo bằng cả compute-only time và total time including communication.
-10. RAG/AI Agent demo chỉ là phần phụ để chứng minh ứng dụng, không phải phần lõi.
+10. FAISS exact flat CPU được dùng làm external baseline, không phải lõi implementation.
+11. Phase 8 benchmark lại trên synthetic benchmark và một real corpus đã convert là SQuAD + all-MiniLM-L6-v2.
+12. FAISS comparison không thay thế sequential baseline trong speedup.csv; nó là experiment riêng để đối chiếu với một thư viện thực tế.
+13. Demo metadata/memory_text nếu có chỉ nên để ở future work hoặc appendix, không còn là numbered phase chính.
 ```
 
 ---
 
 ## 18. Kết luận kế hoạch
 
-Project này phù hợp với yêu cầu đề vì có bài toán tính toán lớn, song song hóa rõ ràng, communication đo được, correctness kiểm tra được và speedup biểu diễn được bằng thực nghiệm.
+Project này phù hợp với yêu cầu đề vì có bài toán tính toán lớn, song song hóa rõ ràng, communication đo được, correctness kiểm tra được, speedup biểu diễn được bằng thực nghiệm, và còn có external baseline với FAISS để đối chiếu với một thư viện retrieval thực tế mà không làm loãng phần parallel computing cốt lõi.
 
 Câu mô tả ngắn nên dùng khi trình bày với giảng viên:
 
-> Em xây dựng một module truy hồi bộ nhớ dài hạn cho AI Agent bằng C++ và MPI. Module này thực hiện exact top-k vector retrieval trên tập memory embeddings lớn. Em song song hóa theo dữ liệu bằng cách chia memory database thành nhiều shard cho các MPI processes. Mỗi process tính local top-k trên shard của mình, sau đó rank 0 thu thập và merge thành global top-k. Project sẽ đánh giá correctness bằng sequential exact baseline, chọn N để runtime đạt khoảng 2-3 phút, kiểm tra granularity/load balancing bằng biểu đồ compute/communication time từng process, và đo speedup khi thay đổi số lượng processes.
+> Em xây dựng một module truy hồi bộ nhớ dài hạn cho AI Agent bằng C++ và MPI. Module này thực hiện exact top-k vector retrieval trên tập memory embeddings lớn. Em song song hóa theo dữ liệu bằng cách chia memory database thành nhiều shard cho các MPI processes. Mỗi process tính local top-k trên shard của mình, sau đó rank 0 thu thập và merge thành global top-k. Project sẽ đánh giá correctness bằng sequential exact baseline, chọn N để runtime đạt khoảng 2-3 phút, kiểm tra granularity/load balancing bằng biểu đồ compute/communication time từng process, đo speedup khi thay đổi số lượng processes, và so sánh thêm với FAISS exact flat như một external baseline trên synthetic benchmark và một real corpus đã convert.
 

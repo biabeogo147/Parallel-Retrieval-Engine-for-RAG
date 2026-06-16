@@ -64,6 +64,7 @@ init_benchmark_env() {
     bench_results_dir=${BENCH_RESULTS_DIR:-"$repo_root/results"}
     bench_scratch_dir=${BENCH_SCRATCH_DIR:-"$repo_root/.cache/benchmarks"}
     bench_figures_dir="${bench_results_dir}/figures"
+    bench_faiss_results_dir=${BENCH_FAISS_RESULTS_DIR:-"${bench_results_dir}/faiss"}
     bench_d=${BENCH_D:-384}
     bench_q=${BENCH_Q:-100}
     bench_topk=${BENCH_TOPK:-10}
@@ -74,11 +75,16 @@ init_benchmark_env() {
     selection_env_path="${bench_results_dir}/benchmark_selection.env"
     bench_plot_venv_dir=${BENCH_PLOT_VENV_DIR:-"$repo_root/.venv"}
     bench_python_stdlib=${BENCH_PYTHON_STDLIB:-python3}
+    bench_squad_input_dir=${BENCH_SQUAD_INPUT_DIR:-/mnt/e/data/squad/plain_text}
+    bench_squad_output_dir=${BENCH_SQUAD_OUTPUT_DIR:-"$repo_root/.cache/real_corpora/squad_minilm"}
+    bench_squad_model=${BENCH_SQUAD_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
+    bench_squad_queries_limit=${BENCH_SQUAD_QUERIES_LIMIT:-100}
 
     export bench_build_dir
     export bench_results_dir
     export bench_scratch_dir
     export bench_figures_dir
+    export bench_faiss_results_dir
     export bench_d
     export bench_q
     export bench_topk
@@ -89,10 +95,14 @@ init_benchmark_env() {
     export selection_env_path
     export bench_plot_venv_dir
     export bench_python_stdlib
+    export bench_squad_input_dir
+    export bench_squad_output_dir
+    export bench_squad_model
+    export bench_squad_queries_limit
 }
 
 ensure_benchmark_dirs() {
-    mkdir -p "$bench_results_dir" "$bench_scratch_dir" "$bench_figures_dir"
+    mkdir -p "$bench_results_dir" "$bench_scratch_dir" "$bench_figures_dir" "$bench_faiss_results_dir"
 }
 
 require_benchmark_binary() {
@@ -243,4 +253,28 @@ ensure_plot_python() {
 
     BENCH_PLOT_PYTHON="$bench_plot_venv_dir/bin/python"
     export BENCH_PLOT_PYTHON
+}
+
+ensure_phase8_python() {
+    mode=${1:-faiss}
+
+    if [ ! -x "$bench_plot_venv_dir/bin/python" ]; then
+        python3 -m venv "$bench_plot_venv_dir"
+    fi
+
+    if [ "$mode" = "real" ]; then
+        import_check="import faiss, numpy, pyarrow, sentence_transformers"
+        requirements_file="$script_dir/requirements-phase8.txt"
+    else
+        import_check="import faiss, numpy"
+        requirements_file="$script_dir/requirements-faiss.txt"
+    fi
+
+    if ! "$bench_plot_venv_dir/bin/python" -c "$import_check" >/dev/null 2>&1; then
+        "$bench_plot_venv_dir/bin/python" -m pip install --upgrade pip >/dev/null
+        "$bench_plot_venv_dir/bin/python" -m pip install -r "$requirements_file" >/dev/null
+    fi
+
+    BENCH_PHASE8_PYTHON="$bench_plot_venv_dir/bin/python"
+    export BENCH_PHASE8_PYTHON
 }
