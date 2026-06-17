@@ -8,6 +8,7 @@ Use `docs/usage/` for:
 - build and smoke-test commands
 - synthetic retrieval workflows
 - benchmark automation workflows
+- physical multi-machine MPI setup and validation workflows
 - common troubleshooting and safe generated-state cleanup
 
 Use `docs/development/` for:
@@ -24,6 +25,10 @@ Use `docs/development/` for:
 3. [results-csv-reference.md](results-csv-reference.md)
 4. [benchmark-workflows.md](benchmark-workflows.md)
 5. [troubleshooting.md](troubleshooting.md)
+
+If you need a physical three-machine MPI cluster instead of the normal single-machine path, branch into:
+
+- [mpi-cluster/README.md](mpi-cluster/README.md)
 
 If you only need the shortest path after cloning, start with `getting-started-wsl.md`, then jump directly to the specific workflow you need.
 
@@ -83,3 +88,18 @@ If you want the shortest successful path:
 3. Read [results-csv-reference.md](results-csv-reference.md) to understand the generated outputs.
 4. When that works, move to [benchmark-workflows.md](benchmark-workflows.md), including the separate FAISS comparison workflow if you need the Phase 8 baseline path.
 5. If anything fails, check [troubleshooting.md](troubleshooting.md).
+
+## Physical MPI Cluster Setup
+
+Use [mpi-cluster/README.md](mpi-cluster/README.md) when:
+
+- you are preparing three physical computers instead of one local development machine
+- you need one shared cluster workflow after separate per-node bootstrap steps
+- you want to run `parallel_retriever` across multiple LAN-reachable Ubuntu environments
+
+That bundle keeps the current repo boundaries intact:
+
+- `docs/usage/mpi-cluster/`
+  - operational, copy-paste oriented multi-machine setup and runbook
+- `docs/development/`
+  - deeper technical contracts, architecture, and maintenance guidance

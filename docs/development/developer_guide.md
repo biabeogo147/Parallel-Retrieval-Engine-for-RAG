@@ -4,6 +4,8 @@ This file merges the former `environment_setup.md`, `dev_workflow.md`, and `code
 
 Fresh-clone, command-first operational onboarding now lives under `docs/usage/`. Start with `../usage/README.md` if you want the shortest path from clone to working commands. This guide remains the deeper technical development reference behind those workflows.
 
+Physical multi-node MPI cluster operations now live under `../usage/mpi-cluster/README.md`. The canonical development environment in this document remains the single-machine WSL-first setup used for coding, building, testing, and the current automation scripts.
+
 ## Included Documents
 
 - `environment_setup.md`

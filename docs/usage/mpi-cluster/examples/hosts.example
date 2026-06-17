@@ -1,0 +1,7 @@
+# Replace these hostnames or IPs with the real cluster values.
+# Replace slots and max-slots with the per-node process budget you want to allow.
+# The cluster-runbook examples assume 4 slots per node and therefore use -np 12.
+
+rag-head slots=4 max-slots=4
+rag-worker1 slots=4 max-slots=4
+rag-worker2 slots=4 max-slots=4

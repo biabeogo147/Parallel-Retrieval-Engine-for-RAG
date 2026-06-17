@@ -63,6 +63,10 @@ For copy-paste operational docs after `git clone`, start with:
 
 - `docs/usage/README.md`
 
+For physical three-machine MPI cluster setup after local onboarding, continue with:
+
+- `docs/usage/mpi-cluster/README.md`
+
 ## Quickstart in WSL
 
 Clone the repo into the canonical location:
@@ -91,6 +95,10 @@ This is the compact onboarding path. For the full command-first workflow set, us
 - `docs/usage/results-csv-reference.md`
 - `docs/usage/benchmark-workflows.md`
 - `docs/usage/troubleshooting.md`
+
+If you need a physical multi-node MPI deployment and validation workflow instead of the single-machine path above, use:
+
+- `docs/usage/mpi-cluster/README.md`
 
 ## Current Phase Status
 
@@ -129,6 +137,13 @@ Still deferred to later phases:
 - `docs/usage/results-csv-reference.md`
 - `docs/usage/benchmark-workflows.md`
 - `docs/usage/troubleshooting.md`
+- `docs/usage/mpi-cluster/README.md`
+- `docs/usage/mpi-cluster/node-bootstrap-wsl.md`
+- `docs/usage/mpi-cluster/node-bootstrap-ubuntu.md`
+- `docs/usage/mpi-cluster/node-bootstrap-macos-multipass.md`
+- `docs/usage/mpi-cluster/cluster-assembly-and-validation.md`
+- `docs/usage/mpi-cluster/cluster-runbook.md`
+- `docs/usage/mpi-cluster/troubleshooting.md`
 - `docs/analysis/README.md`
 - `docs/analysis/report_mapping.md`
 - `docs/analysis/latest-benchmark-review.md`
@@ -149,3 +164,4 @@ Still deferred to later phases:
 - `docs/plans/2026-06-16-phase-8-faiss-baseline-comparison.md`
 - `docs/plans/2026-06-16-benchmark-analysis-layer.md`
 - `docs/plans/2026-06-15-usage-onboarding-docs.md`
+- `docs/plans/2026-06-17-mpi-cluster-setup-docs.md`

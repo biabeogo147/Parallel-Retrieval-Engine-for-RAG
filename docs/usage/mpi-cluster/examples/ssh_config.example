@@ -1,0 +1,23 @@
+# Copy this file to .cache/cluster/ssh_config on the head node.
+# Replace HostName and User with the real values for your environment.
+
+Host rag-head
+    HostName 192.168.1.10
+    User rag
+    IdentityFile ~/.ssh/id_ed25519
+    StrictHostKeyChecking accept-new
+    ServerAliveInterval 30
+
+Host rag-worker1
+    HostName 192.168.1.11
+    User rag
+    IdentityFile ~/.ssh/id_ed25519
+    StrictHostKeyChecking accept-new
+    ServerAliveInterval 30
+
+Host rag-worker2
+    HostName 192.168.1.12
+    User rag
+    IdentityFile ~/.ssh/id_ed25519
+    StrictHostKeyChecking accept-new
+    ServerAliveInterval 30
