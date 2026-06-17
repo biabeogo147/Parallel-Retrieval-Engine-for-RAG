@@ -105,9 +105,13 @@ Replace `en0` if your Mac uses a different interface name.
 
 **Next step**
 
-- Enter the Ubuntu guest and prepare SSH plus the repo toolchain.
+- Enter the Ubuntu guest, create or confirm the Linux user `rag`, and then prepare SSH plus the repo toolchain.
 
-## 4. Install SSH And Node Utilities Inside Ubuntu
+## 4. Create Or Confirm The Linux User `rag` Inside Ubuntu
+
+The cluster examples in this repository assume the Linux username `rag` on every Ubuntu node.
+
+Multipass usually creates a default Ubuntu user for you automatically. If you want the canonical cluster username, create `rag` inside the guest before continuing.
 
 Enter the guest:
 
@@ -122,6 +126,41 @@ Now continue inside Ubuntu.
 **Prerequisites**
 
 - You are inside the Ubuntu guest shell.
+- The current guest user can run `sudo`.
+
+**Bash**
+
+```bash
+whoami
+id
+getent passwd rag || sudo adduser rag
+sudo usermod -aG sudo rag
+getent passwd rag
+sudo -l -U rag
+su - rag
+whoami
+pwd
+```
+
+**Expected artifacts**
+
+- A Linux account named `rag` inside the guest.
+- `rag` belongs to the `sudo`-capable admin group inside the guest.
+
+**What success looks like**
+
+- `whoami` prints `rag` after `su - rag`.
+- `sudo -l -U rag` succeeds.
+
+**Next step**
+
+- Install SSH and the node utilities while using `rag` inside the Ubuntu guest.
+
+## 5. Install SSH And Node Utilities Inside Ubuntu
+
+**Prerequisites**
+
+- You are inside the Ubuntu guest shell as `rag` or the one Linux username you intentionally chose for the cluster.
 
 **Bash**
 
@@ -148,7 +187,7 @@ hostname -I
 
 - Clone the repository and install the repo toolchain inside the guest.
 
-## 5. Clone The Repo And Install The Repo Toolchain
+## 6. Clone The Repo And Install The Repo Toolchain
 
 **Prerequisites**
 
@@ -179,7 +218,7 @@ cd ~/work/Parallel-Retrieval-Engine-for-RAG
 
 - Configure and build the node.
 
-## 6. Configure, Build, And Smoke-Test The Node
+## 7. Configure, Build, And Smoke-Test The Node
 
 **Prerequisites**
 
@@ -212,7 +251,7 @@ cmake --build build/release
 
 - Record the guest identity facts needed by the head node.
 
-## 7. Record Node Facts For The Head Node
+## 8. Record Node Facts For The Head Node
 
 **Prerequisites**
 

@@ -33,9 +33,75 @@ wsl.exe -d Ubuntu-24.04
 
 **Next step**
 
-- Configure the WSL node so the Ubuntu guest can participate in LAN-based SSH and MPI workflows.
+- Create or confirm the Linux user `rag`, then configure the WSL node so the Ubuntu guest can participate in LAN-based SSH and MPI workflows.
 
-## 2. Enable Mirrored Networking On The Windows Host
+## 2. Create Or Confirm The Linux User `rag`
+
+The cluster examples in this repository assume the Linux username `rag` on every Ubuntu node.
+
+If this Ubuntu distro has not completed first-run setup yet, create that user during the first Ubuntu prompt flow:
+
+- enter `rag` when Ubuntu asks for the new UNIX username
+- choose a password for `rag`
+
+If the distro already exists with another default user and you still want the canonical username, create `rag` explicitly and make it the default WSL user.
+
+**Prerequisites**
+
+- `Ubuntu-24.04` already opens successfully in WSL.
+- You can run `sudo` as the current Ubuntu user.
+
+**Bash**
+
+```bash
+whoami
+id
+getent passwd rag || sudo adduser rag
+sudo usermod -aG sudo rag
+sudo tee /etc/wsl.conf >/dev/null <<'EOF'
+[boot]
+systemd=true
+
+[user]
+default=rag
+EOF
+getent passwd rag
+```
+
+Then restart the distro from Windows:
+
+**PowerShell**
+
+```powershell
+wsl.exe --shutdown
+wsl.exe -d Ubuntu-24.04
+```
+
+Back inside Ubuntu, verify:
+
+**Bash**
+
+```bash
+whoami
+id
+sudo -l
+```
+
+**Expected artifacts**
+
+- A Linux account named `rag`.
+- `/etc/wsl.conf` includes a `[user]` section with `default=rag`.
+
+**What success looks like**
+
+- `whoami` prints `rag` after reopening Ubuntu.
+- `sudo -l` works for the `rag` user.
+
+**Next step**
+
+- Configure the Windows host so the Ubuntu guest is LAN-reachable for SSH and MPI.
+
+## 3. Enable Mirrored Networking On The Windows Host
 
 Mirrored networking is the recommended path when a WSL guest must be reachable from the local network.
 
@@ -79,7 +145,7 @@ wsl.exe -d Ubuntu-24.04
 
 - Verify systemd support so the `ssh` service can be managed cleanly inside Ubuntu.
 
-## 3. Verify Or Enable systemd In Ubuntu
+## 4. Verify Or Enable systemd In Ubuntu
 
 Current Ubuntu versions installed through `wsl --install` usually enable systemd by default. This section verifies that assumption and gives a fallback if needed.
 
@@ -136,11 +202,11 @@ systemctl status --no-pager
 
 - Install SSH and the node-local prerequisites used by the cluster workflow.
 
-## 4. Install SSH And Node Utilities
+## 5. Install SSH And Node Utilities
 
 **Prerequisites**
 
-- You are inside Ubuntu as a normal Linux user.
+- You are inside Ubuntu as the `rag` user or another normal Linux user you intentionally chose for every node.
 - `systemd` is available.
 
 **Bash**
@@ -168,7 +234,7 @@ hostname -I
 
 - Give the Ubuntu guest a stable cluster identity and then clone the repository.
 
-## 5. Set The Node Identity
+## 6. Set The Node Identity
 
 Use one of the canonical names from this bundle:
 
@@ -195,18 +261,18 @@ whoami
 **What success looks like**
 
 - `hostnamectl --static` prints the chosen cluster hostname.
-- `whoami` prints the Linux username you will reuse on the other nodes.
+- `whoami` prints `rag` or the one Linux username you will reuse on the other nodes.
 
 **Next step**
 
 - Clone the repository into the canonical path inside Ubuntu.
 
-## 6. Clone The Repo And Install The Repo Toolchain
+## 7. Clone The Repo And Install The Repo Toolchain
 
 **Prerequisites**
 
 - `git` is installed.
-- You are inside Ubuntu.
+- You are inside Ubuntu as `rag` or the one Linux username you intentionally chose for the whole cluster.
 
 **Bash**
 
@@ -234,7 +300,7 @@ cd ~/work/Parallel-Retrieval-Engine-for-RAG
 
 - Configure and build the debug and release trees used by the cluster workflow.
 
-## 7. Configure, Build, And Smoke-Test The Node
+## 8. Configure, Build, And Smoke-Test The Node
 
 **Prerequisites**
 
@@ -270,7 +336,7 @@ cmake --build build/release
 
 - Record the node facts that the head node will need during cluster assembly.
 
-## 8. Record Node Facts For The Head Node
+## 9. Record Node Facts For The Head Node
 
 Before leaving this machine, record these facts:
 

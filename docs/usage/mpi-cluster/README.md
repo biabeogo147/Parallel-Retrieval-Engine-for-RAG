@@ -52,6 +52,7 @@ All platform variants in this bundle follow the same cluster rules:
 
 - Every node must provide an Ubuntu 24.04 user shell.
 - Use the same Linux username on all three nodes whenever possible.
+- The recommended Linux username for this bundle is `rag`.
 - Use the same repo path on all three nodes:
   - `~/work/Parallel-Retrieval-Engine-for-RAG`
 - Use the same binary paths on all three nodes:
@@ -62,7 +63,9 @@ All platform variants in this bundle follow the same cluster rules:
 - Use repo-local outputs under:
   - `~/work/Parallel-Retrieval-Engine-for-RAG/results/`
 
-The examples in this bundle assume the Linux username `rag`. If you choose another username, replace `rag` consistently in SSH, `rsync`, and path examples.
+The examples in this bundle assume the Linux username `rag`. The node bootstrap guides now include explicit steps to create that user. If you choose another username instead, replace `rag` consistently in SSH, `rsync`, and path examples.
+
+For Windows + WSL2 and macOS + Multipass nodes, `rag` is the Linux user inside the Ubuntu guest, not the Windows or macOS host login account.
 
 ## Data Model
 

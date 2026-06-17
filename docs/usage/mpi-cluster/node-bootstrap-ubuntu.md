@@ -4,7 +4,51 @@ This guide prepares one physical computer running native Ubuntu 24.04 to act as 
 
 Use this guide for the machine that will become `rag-head`, `rag-worker1`, or `rag-worker2` when that machine runs Ubuntu directly on bare metal.
 
-## 1. Confirm The Base OS And Cluster Role
+## 1. Create Or Confirm The Linux User `rag`
+
+The cluster examples in this repository assume the Linux username `rag` on every Ubuntu node.
+
+If the current logged-in account is already the user you want to reuse on all nodes, you may keep it. If you want the canonical path from this guide, create `rag` now.
+
+**Prerequisites**
+
+- The machine already boots into Ubuntu 24.04.
+- You have access to an account that can run `sudo`.
+
+**Bash**
+
+```bash
+whoami
+id
+getent passwd rag || sudo adduser rag
+sudo usermod -aG sudo rag
+getent passwd rag
+sudo -l -U rag
+```
+
+Then switch into the new account for the rest of this guide:
+
+```bash
+su - rag
+whoami
+pwd
+```
+
+**Expected artifacts**
+
+- A Linux account named `rag`.
+- `rag` belongs to the `sudo`-capable admin group.
+
+**What success looks like**
+
+- `whoami` prints `rag` after `su - rag`.
+- `sudo -l -U rag` succeeds.
+
+**Next step**
+
+- Confirm the base OS and set the cluster hostname while using `rag`.
+
+## 2. Confirm The Base OS And Cluster Role
 
 Pick one canonical hostname before you touch the repo:
 
@@ -15,7 +59,7 @@ Pick one canonical hostname before you touch the repo:
 **Prerequisites**
 
 - The machine already boots into Ubuntu 24.04.
-- You can use `sudo`.
+- You are logged in as `rag` or the one Linux username you intentionally chose for the cluster.
 
 **Bash**
 
@@ -42,7 +86,7 @@ hostname -I
 
 - Install the node packages needed for Git, SSH, data sync, and the repo toolchain.
 
-## 2. Install Git, SSH, And Rsync
+## 3. Install Git, SSH, And Rsync
 
 **Prerequisites**
 
@@ -78,7 +122,7 @@ sudo ufw status
 
 - Clone the repository into the canonical working path.
 
-## 3. Clone The Repo Into The Canonical Path
+## 4. Clone The Repo Into The Canonical Path
 
 **Prerequisites**
 
@@ -109,7 +153,7 @@ cd ~/work/Parallel-Retrieval-Engine-for-RAG
 
 - Install the repo-local development and MPI toolchain.
 
-## 4. Install The Repo Toolchain
+## 5. Install The Repo Toolchain
 
 **Prerequisites**
 
@@ -134,7 +178,7 @@ cd ~/work/Parallel-Retrieval-Engine-for-RAG
 
 - Configure and build the debug and release trees.
 
-## 5. Configure, Build, And Smoke-Test The Node
+## 6. Configure, Build, And Smoke-Test The Node
 
 **Prerequisites**
 
@@ -167,7 +211,7 @@ cmake --build build/release
 
 - Record the node facts needed by the head node for cluster assembly.
 
-## 6. Record Node Facts For Cluster Assembly
+## 7. Record Node Facts For Cluster Assembly
 
 **Prerequisites**
 

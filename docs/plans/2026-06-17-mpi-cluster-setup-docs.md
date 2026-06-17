@@ -71,6 +71,7 @@ The shared cluster core then standardizes:
 - [x] Cluster size is fixed to `3` physical computers for this doc bundle.
 - [x] The topology is `1 head node + 2 worker nodes`.
 - [x] Canonical example hostnames are `rag-head`, `rag-worker1`, and `rag-worker2`.
+- [x] Canonical example Linux username is `rag`, and the bootstrap guides now include explicit user-creation steps instead of assuming it already exists.
 - [x] Canonical repo path remains `~/work/Parallel-Retrieval-Engine-for-RAG`.
 - [x] Authoritative shared data is managed from the head node.
 - [x] Actual retrieval runs use local `data/` copies on each node.
