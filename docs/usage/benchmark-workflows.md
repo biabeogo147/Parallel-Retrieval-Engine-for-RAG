@@ -109,6 +109,7 @@ bash ./scripts/run_all_experiments.sh
 
 - Inspect the generated CSVs with [results-csv-reference.md](results-csv-reference.md), or re-run with a reduced custom profile.
 - If you also need the Phase 8 external baseline, run `bash ./scripts/run_faiss_comparison.sh` afterward.
+- After the raw benchmark and FAISS outputs exist, run the analysis layer described in section 10.
 
 ## 2. Stage: Runtime-By-N Selection
 
@@ -295,6 +296,7 @@ bash ./scripts/run_faiss_comparison.sh
 **Next step**
 
 - Open [results-csv-reference.md](results-csv-reference.md) and read the `results/faiss/*.csv` sections before writing report notes or sharing benchmark conclusions.
+- Then run the benchmark-analysis command in section 10 so the conclusions are regenerated from the final CSV set.
 
 ## 8. Direct Real-Corpus Preparation Command
 
@@ -374,6 +376,55 @@ bash ./scripts/run_faiss_comparison.sh
 **Next step**
 
 - Compare the custom output tables with the default profile, again using [results-csv-reference.md](results-csv-reference.md) to interpret the schemas.
+
+## 10. Analyze The Final Benchmark Outputs
+
+Use this step after:
+
+- `bash ./scripts/run_all_experiments.sh`
+- `bash ./scripts/run_faiss_comparison.sh`
+
+so the repo also generates report-ready conclusions from the final CSV set instead of leaving interpretation as a manual step.
+
+**Prerequisites**
+
+- `results/runtime_by_N.csv` already exists.
+- `results/correctness.csv` already exists.
+- `results/granularity.csv` already exists.
+- `results/speedup.csv` already exists.
+- `results/faiss/comparison.csv` already exists.
+- `results/faiss/synthetic_correctness.csv` and `results/faiss/squad_correctness.csv` already exist.
+
+**Bash**
+
+```bash
+python3 ./scripts/analyze_benchmarks.py \
+  --results-dir results \
+  --output-dir results/analysis \
+  --docs-output docs/analysis/latest-benchmark-review.md
+```
+
+**Expected artifacts**
+
+- `results/analysis/runtime_analysis.csv`
+- `results/analysis/granularity_analysis.csv`
+- `results/analysis/speedup_analysis.csv`
+- `results/analysis/faiss_analysis.csv`
+- `results/analysis/benchmark_summary.json`
+- `results/analysis/final_conclusions.md`
+- `docs/analysis/latest-benchmark-review.md`
+
+**What success looks like**
+
+- The script prints `Wrote ...` lines for all seven outputs.
+- `benchmark_summary.json` includes either:
+  - `VALID`
+  - `INVALID_UNTIL_CORRECTNESS_FIXED`
+- `docs/analysis/latest-benchmark-review.md` contains all 8 conclusion sections, ready to adapt into the report.
+
+**Next step**
+
+- Read [../analysis/README.md](../analysis/README.md) and [../analysis/report_mapping.md](../analysis/report_mapping.md) to map the generated findings into the final thesis/report structure.
 
 ## Notes
 

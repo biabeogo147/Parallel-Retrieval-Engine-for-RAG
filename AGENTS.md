@@ -62,6 +62,10 @@ If a task affects fresh-clone onboarding, copy-paste command workflows, or troub
 - `docs/usage/README.md`
 - the relevant file(s) under `docs/usage/`
 
+If a task affects benchmark interpretation, report wording, or next-step recommendations derived from benchmark artifacts, contributors must also read:
+
+- the relevant file(s) under `docs/analysis/`
+
 ## Canonical Document Roles
 
 The repository has one canonical document per major concern. Do not create a second source of truth for the same topic.
@@ -71,6 +75,12 @@ The repository has one canonical document per major concern. Do not create a sec
   - copy-paste operational workflows
   - benchmark script usage
   - troubleshooting and generated-state cleanup
+
+- `docs/analysis/`
+  - benchmark interpretation
+  - report-ready conclusions
+  - report-section mapping
+  - post-run next-step recommendations
 
 - `docs/development/project_specification.md`
   - project scope
@@ -134,6 +144,7 @@ A contributor must update the relevant development document before or during imp
 Typical mapping:
 
 - fresh-clone onboarding, command-first usage flows, troubleshooting -> `docs/usage/`
+- benchmark interpretation, report mapping, conclusion wording -> `docs/analysis/`
 - scope or algorithm change -> `project_specification.md`
 - dataset, binary format, benchmark, generator behavior -> `data_pipeline_and_benchmarks.md`
 - environment, scripts, layout, build or test flow -> `developer_guide.md`

@@ -80,14 +80,15 @@ If you want the fastest path to understanding, read the source in this order:
 34. `scripts/faiss_compare.py`
 35. `scripts/prepare_squad_minilm.py`
 36. `scripts/benchmark_csv.py`
-37. `scripts/plot_results.py`
-38. `tests/BenchmarkMetricsTest.cpp`
-39. `tests/CorrectnessCheckerTest.cpp`
-40. `tests/SequentialRetrieverTest.cpp`
-41. `tests/ParallelRetrieverTest.cpp`
-42. `tests/BinaryDatasetTest.cpp`
-43. `tests/ConfigLoggerTest.cpp`
-44. `tests/cmake/*.cmake`
+37. `scripts/analyze_benchmarks.py`
+38. `scripts/plot_results.py`
+39. `tests/BenchmarkMetricsTest.cpp`
+40. `tests/CorrectnessCheckerTest.cpp`
+41. `tests/SequentialRetrieverTest.cpp`
+42. `tests/ParallelRetrieverTest.cpp`
+43. `tests/BinaryDatasetTest.cpp`
+44. `tests/ConfigLoggerTest.cpp`
+45. `tests/cmake/*.cmake`
 
 For a file-by-file reference, also read [source_file_reference.md](#source-file-reference).
 
@@ -637,6 +638,7 @@ The working pipeline is now:
 8. benchmark automation scripts and figure generation
 9. optional `prepare_squad_minilm.py` conversion for the Phase 8 real-corpus path
 10. `run_faiss_comparison.sh` for synthetic-plus-real FAISS baseline comparison
+11. `analyze_benchmarks.py` for derived analysis CSVs, JSON summaries, and report-ready Markdown conclusions
 
 In more detail:
 
@@ -665,6 +667,11 @@ In more detail:
    - `results/faiss/*_run_metrics.csv`
    - `results/faiss/*_correctness.csv`
    - `results/faiss/comparison.csv`
+8. the analysis layer reads the final runtime, correctness, granularity, speedup, and FAISS outputs, then writes:
+   - `results/analysis/*.csv`
+   - `results/analysis/benchmark_summary.json`
+   - `results/analysis/final_conclusions.md`
+   - `docs/analysis/latest-benchmark-review.md`
 
 At the end of Phase 8, the project has an end-to-end synthetic benchmark path plus an external-baseline comparison path over both synthetic vectors and one converted real corpus.
 
@@ -764,6 +771,7 @@ The `tests/cmake/*.cmake` scripts validate executable-level behavior:
 - `run_all_experiments.sh` writes the final CSV set and all benchmark figures
 - `benchmark_csv.py build-faiss-comparison` writes the final Phase 8 comparison table
 - `run_faiss_comparison.sh` writes the expected FAISS synthetic and real-corpus artifacts on a reduced smoke profile
+- `analyze_benchmarks.py` writes derived analysis outputs, invalid-correctness gating, and the final report-ready Markdown review
 
 ## Source Boundaries to Remember After Phase 8
 
@@ -775,6 +783,7 @@ The `tests/cmake/*.cmake` scripts validate executable-level behavior:
 - `BenchmarkMetrics` owns canonical run-summary and speedup-row semantics
 - `MpiUtils` owns blocking transport helpers and startup coordination
 - `phase8_common.py` owns the Phase 8 Python-side mirror of the binary and CSV contracts
+- `analyze_benchmarks.py` owns the post-run interpretation layer and must not rewrite raw benchmark CSV inputs
 - rank `0` is the only process that prints human-facing CLI text and writes CSV files in the MPI path
 - benchmark orchestration lives in scripts, but timing semantics stay in shared C++ code
 - FAISS remains an external baseline workflow and does not move into `retriever_core`
@@ -817,6 +826,10 @@ If you need to explain the current source code in a report, this wording fits th
    - FAISS exact-flat comparison on the same normalized binary vectors
    - a real-corpus conversion path through `SQuAD + all-MiniLM-L6-v2`
    - comparison tables that keep correctness and fairness policies explicit
+9. The benchmark-analysis layer now turns the final CSV artifacts into reusable conclusions:
+   - derived classifications for runtime, load balance, speedup, and FAISS gap
+   - machine-readable benchmark summaries
+   - report-ready Markdown conclusions
 
 
 ---
@@ -1044,6 +1057,12 @@ Use this file when you want to answer: "What exactly is this file responsible fo
 
 - implements focused CSV aggregation commands for selection, speedup, granularity summaries, and the Phase 8 FAISS comparison table
 
+## `scripts/analyze_benchmarks.py`
+
+**Responsibility**
+
+- reads the final benchmark CSV set and generates derived analysis tables, JSON summaries, and report-ready Markdown conclusions
+
 ## `scripts/plot_results.py`
 
 **Responsibility**
@@ -1226,6 +1245,24 @@ Use this file when you want to answer: "What exactly is this file responsible fo
 
 - validates the reduced-profile Phase 8 orchestration flow with synthetic data plus a prebuilt tiny real-corpus fixture
 
+## `tests/cmake/RunBenchmarkAnalysisSmoke.cmake`
+
+**Responsibility**
+
+- validates end-to-end generation of derived analysis outputs from a complete benchmark fixture set
+
+## `tests/cmake/RunBenchmarkAnalysisInvalidCorrectnessSmoke.cmake`
+
+**Responsibility**
+
+- validates that invalid correctness forces the analysis layer to mark performance conclusions as invalid
+
+## `tests/cmake/RunBenchmarkAnalysisMissingInputFail.cmake`
+
+**Responsibility**
+
+- validates that the analysis layer fails clearly when a required benchmark input CSV is missing
+
 ## Build File
 
 ## `CMakeLists.txt`
@@ -1284,6 +1321,7 @@ Use this file when you want to answer: "What exactly is this file responsible fo
   - `scripts/run_speedup.sh`
   - `scripts/run_all_experiments.sh`
   - `scripts/benchmark_csv.py`
+  - `scripts/analyze_benchmarks.py`
   - `scripts/plot_results.py`
 - Phase 8 external baseline workflow:
   - `scripts/run_faiss_comparison.sh`

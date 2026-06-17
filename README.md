@@ -14,6 +14,7 @@ The current implementation covers:
 - Phase 6 benchmark-summary work: canonical one-run metrics rows for sequential and parallel retrieval
 - Phase 7 automation work: WSL-first synthetic benchmark scripts, speedup/runtime aggregation, and figure generation
 - Phase 8 external-baseline work: FAISS exact-flat comparison over synthetic datasets plus one real-corpus conversion path for `SQuAD + sentence-transformers/all-MiniLM-L6-v2`
+- a reusable benchmark-analysis layer: derived analysis CSVs, machine-readable benchmark summaries, and report-ready Markdown conclusions
 
 ## Canonical Development Environment
 
@@ -108,8 +109,10 @@ Implemented now:
 - benchmark automation scripts for runtime-by-N selection, correctness, granularity, speedup, and all-in-one experiment runs
 - Phase 8 Python helpers for binary dataset reuse, FAISS exact-flat search, and SQuAD + MiniLM conversion
 - `run_faiss_comparison.sh` orchestration for sequential, parallel, and FAISS comparison artifacts under `results/faiss/`
+- `analyze_benchmarks.py` for deterministic post-run analysis under `results/analysis/` plus `docs/analysis/latest-benchmark-review.md`
 - `CTest` coverage for parser behavior, dataset IO, deterministic generator smoke checks, sequential retrieval checks, blocking MPI smoke checks, correctness-check workflow checks, and benchmark automation smoke runs
 - `CTest` smoke coverage for FAISS comparison-table generation and reduced-profile FAISS workflow orchestration
+- `CTest` smoke coverage for benchmark-analysis generation, invalid-correctness gating, and missing-input failures
 - WSL helper scripts and onboarding docs
 
 Still deferred to later phases:
@@ -126,6 +129,9 @@ Still deferred to later phases:
 - `docs/usage/results-csv-reference.md`
 - `docs/usage/benchmark-workflows.md`
 - `docs/usage/troubleshooting.md`
+- `docs/analysis/README.md`
+- `docs/analysis/report_mapping.md`
+- `docs/analysis/latest-benchmark-review.md`
 - `docs/development/project_specification.md`
 - `docs/development/data_pipeline_and_benchmarks.md`
 - `docs/development/developer_guide.md`
@@ -141,4 +147,5 @@ Still deferred to later phases:
 - `docs/plans/2026-06-15-phase-7-experiment-automation.md`
 - `docs/plans/2026-06-15-phase-8-plan-reframe.md`
 - `docs/plans/2026-06-16-phase-8-faiss-baseline-comparison.md`
+- `docs/plans/2026-06-16-benchmark-analysis-layer.md`
 - `docs/plans/2026-06-15-usage-onboarding-docs.md`

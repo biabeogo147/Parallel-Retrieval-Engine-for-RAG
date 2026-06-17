@@ -438,6 +438,9 @@ The automation layer now provides:
 - `scripts/run_faiss_comparison.sh`
   - runs the Phase 8 sequential / parallel / FAISS comparison workflow
   - creates `results/faiss/*.csv`
+- `scripts/analyze_benchmarks.py`
+  - derives report-oriented analysis outputs from the final benchmark CSVs
+  - creates `results/analysis/*` and `docs/analysis/latest-benchmark-review.md`
 
 Default benchmark knobs are controlled by environment variables:
 
@@ -532,6 +535,26 @@ The real-corpus conversion cache is stored under:
 
 - `.cache/real_corpora/squad_minilm/`
 
+## Benchmark Analysis Flow
+
+After the synthetic benchmark workflow and the FAISS comparison workflow have both completed, run the reusable analysis layer:
+
+```bash
+python3 ./scripts/analyze_benchmarks.py \
+  --results-dir results \
+  --output-dir results/analysis \
+  --docs-output docs/analysis/latest-benchmark-review.md
+```
+
+This analysis pass is intentionally post-run and derived-only. It does not change the raw benchmark CSV contracts. Instead, it generates:
+
+- derived analysis CSVs under `results/analysis/`
+- a machine-readable `benchmark_summary.json`
+- a Markdown review in `results/analysis/final_conclusions.md`
+- a report-facing copy at `docs/analysis/latest-benchmark-review.md`
+
+Use that final Markdown file when you need a reproducible narrative summary instead of writing one-off benchmark notes by hand.
+
 ## Generated Artifacts
 
 Generated files should stay inside these locations:
@@ -539,6 +562,7 @@ Generated files should stay inside these locations:
 - build outputs: `build/debug` and `build/release`
 - local synthetic datasets produced by the current pipeline: `data/`
 - benchmark outputs produced by the current pipeline: `results/`
+- derived benchmark-analysis outputs: `results/analysis/`
 - benchmark scratch/cache files: `.cache/benchmarks/`
 - converted Phase 8 real-corpus binaries and metadata: `.cache/real_corpora/`
 - plotting and Phase 8 Python runtime dependencies: `.venv/`
@@ -551,9 +575,10 @@ When you add or move docs:
 
 1. Keep implementation and architecture docs in `docs/development/`.
 2. Keep user-facing operational how-to docs in `docs/usage/`.
-3. Keep plan artifacts in `docs/plans/`.
-4. Update cross-links immediately if a doc path changes.
-5. Prefer WSL paths in all developer-facing commands.
+3. Keep benchmark interpretation and report-facing benchmark conclusions in `docs/analysis/`.
+4. Keep plan artifacts in `docs/plans/`.
+5. Update cross-links immediately if a doc path changes.
+6. Prefer WSL paths in all developer-facing commands.
 
 
 ---
@@ -624,6 +649,7 @@ POSIX shell helpers intended to run inside Ubuntu WSL.
 - `run_all_experiments.sh`: one-command synthetic benchmark orchestration
 - `run_faiss_comparison.sh`: Phase 8 orchestration for sequential / parallel / FAISS comparison
 - `benchmark_csv.py`: run-summary aggregation and manifest helpers
+- `analyze_benchmarks.py`: post-run benchmark interpretation, derived analysis tables, and report-ready summary generation
 - `phase8_common.py`: shared binary-format and CSV helpers for the Phase 8 Python scripts
 - `plot_results.py`: headless benchmark figure generation
 - `requirements-benchmark.txt`: plotting dependency list for the benchmark venv
@@ -675,6 +701,14 @@ Canonical operational usage docs:
 - copy-paste retrieval workflows
 - benchmark script workflows
 - troubleshooting and safe generated-state cleanup
+
+### `docs/analysis/`
+
+Canonical benchmark-interpretation docs:
+
+- analysis entrypoint and artifact guide
+- report-section mapping
+- latest generated benchmark review
 
 ### `docs/plans/`
 

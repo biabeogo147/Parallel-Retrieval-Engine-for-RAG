@@ -385,4 +385,31 @@ if(BUILD_TESTING)
             -P
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/RunFaissComparisonWorkflowSmoke.cmake
     )
+    add_test(
+        NAME benchmark_analysis_smoke
+        COMMAND
+            ${CMAKE_COMMAND}
+            -DREPO_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/analysis_smoke
+            -P
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/RunBenchmarkAnalysisSmoke.cmake
+    )
+    add_test(
+        NAME benchmark_analysis_invalid_correctness_smoke
+        COMMAND
+            ${CMAKE_COMMAND}
+            -DREPO_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/analysis_invalid_correctness
+            -P
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/RunBenchmarkAnalysisInvalidCorrectnessSmoke.cmake
+    )
+    add_test(
+        NAME benchmark_analysis_missing_input_fails
+        COMMAND
+            ${CMAKE_COMMAND}
+            -DREPO_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/analysis_missing_input
+            -P
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/RunBenchmarkAnalysisMissingInputFail.cmake
+    )
 endif()
