@@ -49,5 +49,7 @@ The command above generates:
 ## Notes
 
 - The analysis layer is derived-only. It never rewrites the raw benchmark CSVs.
+- The analysis layer reads `results/benchmark_selection.env` as part of the benchmark contract. In particular, it uses `N_SELECTED`, `N_SPEEDUP`, `Q`, `CALIBRATION_MODE`, and `N_MAX_FEASIBLE` to interpret the runtime story correctly.
+- If `CALIBRATION_MODE=N_PLUS_Q`, the generated Markdown review states explicitly that `N`-only targeting was infeasible on the current hardware and that the benchmark intentionally escalated `Q`.
 - If any correctness file contains a `FAIL`, the generated summary marks performance conclusions as `INVALID_UNTIL_CORRECTNESS_FIXED`.
 - The analysis docs are English-only to stay aligned with the rest of the repository documentation.

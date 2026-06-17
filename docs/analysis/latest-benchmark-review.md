@@ -2,7 +2,7 @@
 
 ## 1. Benchmark Validity Check
 
-Evidence: sequential-vs-parallel correctness checked 100 queries with all_pass=true, FAISS synthetic all_pass=true, and FAISS squad all_pass=true.
+Evidence: sequential-vs-parallel correctness checked 200 queries with all_pass=true, FAISS synthetic all_pass=true, and FAISS squad all_pass=true.
 
 Report-ready statement: The benchmark validity status for this run is `VALID`.
 
@@ -10,9 +10,9 @@ Do not overclaim: if the status is not `VALID`, treat all performance numbers as
 
 ## 2. Runtime-by-N Findings
 
-Evidence: `N_SELECTED=2000000` produced `total_time=16.00208485` seconds with target status `UNDER_TARGET`. The largest tested N was `2000000` with `total_time=16.00208485` seconds.
+    Evidence: `N_SELECTED=10000000` and `Q=200` produced `total_time=144.76677173` seconds with target status `IN_TARGET`. The largest tested N was `10000000` with `total_time=71.72036802` seconds under the initial N sweep.
 
-Report-ready statement: Even the largest tested N stays below the 120-180 second target window. Expand BENCH_N_CANDIDATES first; revisit Q only after the N sweep reaches the target runtime band.
+Report-ready statement: N-only calibration was infeasible on the current hardware after reaching N_MAX_FEASIBLE=10000000. The benchmark therefore fixed N_SELECTED=10000000 and escalated Q to 200, producing total_time=144.76677173 seconds inside the 120-180 second target window.
 
 Do not overclaim: selecting the closest available N is not the same as actually hitting the intended 120-180 second benchmark window.
 
@@ -26,7 +26,7 @@ Do not overclaim: correctness here means exact agreement on the same vector inpu
 
 ## 4. Granularity/Load-Balance Findings
 
-Evidence: `local_N` ranged from `200000` to `200000`, `compute_cv=0.00169604`, `active_cv=0.00015744`, and `idle_relative_gap=0.94978714`.
+Evidence: `local_N` ranged from `1000000` to `1000000`, `compute_cv=0.00170526`, `active_cv=0.00004809`, and `idle_relative_gap=0.95895031`.
 
 Report-ready statement: The current load-balance classification is `BALANCED_BUT_IDLE_RATIO_SENSITIVE`.
 
@@ -34,15 +34,15 @@ Do not overclaim: a large relative idle-gap ratio can coexist with tiny absolute
 
 ## 5. Speedup Findings
 
-Evidence: the best total speedup appeared at `P=10` with `total_speedup=8.91643499`; the first total-speedup regression appeared at `P=20`; the recommended operating point is `P=10`.
+Evidence: the best total speedup appeared at `P=10` with `total_speedup=8.80647991`; the first total-speedup regression appeared at `P=20`; the recommended operating point is `P=10`.
 
-Report-ready statement: Communication share stays manageable through P=10 and then rises to 48.35% at P=20, which is also the first total-speedup regression point.
+Report-ready statement: Communication share stays manageable through P=10 and then rises to 66.20% at P=20, which is also the first total-speedup regression point.
 
 Do not overclaim: the highest tested worker count is not automatically the best operating point once communication starts eroding total speedup.
 
 ## 6. FAISS Comparison Findings
 
-Evidence: synthetic total_ratio was `5.29865739` with gap_class `LARGE_GAP`; squad_minilm total_ratio was `6.22703085` with gap_class `LARGE_GAP`.
+Evidence: synthetic total_ratio was `1.15843120` with gap_class `COMPETITIVE`; squad_minilm total_ratio was `5.16494404` with gap_class `LARGE_GAP`.
 
 Report-ready statement: Exact-match correctness holds against the sequential reference. Treat FAISS as an external optimized baseline, not as the project implementation target.
 
@@ -50,9 +50,9 @@ Do not overclaim: FAISS is an optimized external CPU exact-flat baseline, so the
 
 ## 7. Final Conclusion
 
-Evidence: runtime status was `UNDER_TARGET`, load-balance status was `BALANCED_BUT_IDLE_RATIO_SENSITIVE`, and recommended operating point was `P=10`.
+Evidence: runtime status was `IN_TARGET`, load-balance status was `BALANCED_BUT_IDLE_RATIO_SENSITIVE`, and recommended operating point was `P=10`.
 
-Report-ready statement: The system is correct and scales to a practical operating point of P=10, but the current workload still undershoots the intended 2-3 minute runtime target. Load-balance classification is BALANCED_BUT_IDLE_RATIO_SENSITIVE, and FAISS remains an external faster baseline with the largest observed total_ratio=6.23.
+Report-ready statement: The system is correct, the selected workload sits inside the intended benchmark window, and the recommended operating point is P=10. Load-balance classification is BALANCED_BUT_IDLE_RATIO_SENSITIVE, while FAISS remains the faster external baseline with worst total_ratio=5.16.
 
 Do not overclaim: this conclusion is only about the current exact retrieval kernel and benchmark setup, not a general claim about all retrieval systems or ANN baselines.
 
@@ -62,7 +62,7 @@ Evidence: the current benchmark layer now supports deterministic reruns, derived
 
 Report-ready statement:
 
-1. Priority 1: Make the runtime benchmark hit the intended 120-180 second target by expanding BENCH_N_CANDIDATES, then revisiting Q only if needed.
+1. Priority 1: Keep the current N ceiling explicit in the report; future runtime retuning should revisit memory capacity or sharding strategy before blindly increasing N again.
 2. Priority 2: Keep P_SELECTED near physical cores and stop treating 2X workers as a canonical operating point if a regression appears.
 3. Priority 3: Keep the report wording honest about load balance when idle-gap ratio is sensitive but absolute skew is tiny.
 4. Priority 4: Treat FAISS as a realism baseline; do not promise to outperform it with the current exact blocking MPI design.

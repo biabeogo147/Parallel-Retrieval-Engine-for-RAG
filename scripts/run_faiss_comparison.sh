@@ -14,8 +14,8 @@ require_benchmark_binary sequential_retriever
 require_benchmark_binary parallel_retriever
 require_benchmark_binary verify_results
 
-if [ ! -f "$selection_env_path" ]; then
-    "$script_dir/run_select_N.sh"
+if ! selection_manifest_is_complete "$selection_env_path"; then
+    "$script_dir/run_calibrate_target.sh"
 fi
 load_selection_env
 

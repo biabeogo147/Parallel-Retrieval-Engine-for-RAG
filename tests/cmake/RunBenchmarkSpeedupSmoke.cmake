@@ -27,6 +27,8 @@ execute_process(
         "BENCH_TOPK=3"
         "BENCH_EPSILON=1e-5"
         "BENCH_N_CANDIDATES=64 128"
+        "BENCH_Q_CANDIDATES=5"
+        "BENCH_SPEEDUP_N_CANDIDATES=64"
         "BENCH_P_SELECTED=4"
         bash
         "${REPO_ROOT}/scripts/run_select_N.sh"
@@ -75,7 +77,11 @@ endif()
 
 list(GET speedup_lines 1 baseline_row)
 string(REPLACE "," ";" baseline_fields "${baseline_row}")
+list(GET baseline_fields 0 baseline_n)
 list(GET baseline_fields 4 baseline_p)
+if(NOT baseline_n STREQUAL "64")
+    message(FATAL_ERROR "expected baseline speedup row to use N_SPEEDUP=64, got: ${baseline_row}")
+endif()
 if(NOT baseline_p STREQUAL "1")
     message(FATAL_ERROR "expected baseline speedup row to use P=1, got: ${baseline_row}")
 endif()

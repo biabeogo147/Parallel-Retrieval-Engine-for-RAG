@@ -20,6 +20,7 @@ if(NOT DEFINED WORK_DIR)
     message(FATAL_ERROR "WORK_DIR is required")
 endif()
 
+file(REMOVE_RECURSE "${WORK_DIR}")
 file(MAKE_DIRECTORY "${WORK_DIR}")
 set(results_dir "${WORK_DIR}/results")
 set(scratch_dir "${WORK_DIR}/scratch")
@@ -61,6 +62,8 @@ execute_process(
         "BENCH_TOPK=3"
         "BENCH_EPSILON=1e-5"
         "BENCH_N_CANDIDATES=64"
+        "BENCH_Q_CANDIDATES=5"
+        "BENCH_SPEEDUP_N_CANDIDATES=32"
         "BENCH_P_SELECTED=4"
         "BENCH_P_LIST=2 4"
         "BENCH_SQUAD_OUTPUT_DIR=${real_dir}"
@@ -92,4 +95,19 @@ file(STRINGS "${results_dir}/faiss/comparison.csv" comparison_lines)
 list(LENGTH comparison_lines comparison_line_count)
 if(NOT comparison_line_count EQUAL 3)
     message(FATAL_ERROR "expected 3 comparison CSV lines but found ${comparison_line_count}")
+endif()
+
+file(READ "${results_dir}/benchmark_selection.env" selection_text)
+string(REGEX MATCH "N_SELECTED=([0-9]+)" _selection_match "${selection_text}")
+if(NOT CMAKE_MATCH_1)
+    message(FATAL_ERROR "expected N_SELECTED in benchmark_selection.env:\n${selection_text}")
+endif()
+set(selected_n "${CMAKE_MATCH_1}")
+
+file(STRINGS "${results_dir}/faiss/synthetic_run_metrics.csv" synthetic_metrics_lines)
+list(GET synthetic_metrics_lines 1 synthetic_metrics_row)
+string(REPLACE "," ";" synthetic_fields "${synthetic_metrics_row}")
+list(GET synthetic_fields 1 synthetic_n)
+if(NOT synthetic_n STREQUAL "${selected_n}")
+    message(FATAL_ERROR "expected FAISS synthetic path to use N_SELECTED=${selected_n}, got row: ${synthetic_metrics_row}")
 endif()

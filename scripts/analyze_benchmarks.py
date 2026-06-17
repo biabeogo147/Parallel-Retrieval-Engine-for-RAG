@@ -266,10 +266,15 @@ def write_csv(path: Path, fieldnames: list[str], rows: list[dict[str, object]]) 
 
 def analyze_runtime(
     rows: list[dict[str, float | int]],
-    selected_n: int,
+    manifest: dict[str, str],
+    final_selected_total_time: float | None = None,
     target_lower: float = 120.0,
     target_upper: float = 180.0,
 ) -> tuple[list[dict[str, object]], dict[str, object]]:
+    selected_n = int(manifest["N_SELECTED"])
+    selected_q = int(manifest["Q"])
+    calibration_mode = manifest.get("CALIBRATION_MODE", "N_ONLY")
+    n_max_feasible = int(manifest.get("N_MAX_FEASIBLE", manifest["N_SELECTED"]))
     selected_row: dict[str, float | int] | None = None
     max_n_row = max(rows, key=lambda row: int(row["N"]))
     analysis_rows: list[dict[str, object]] = []
@@ -311,30 +316,57 @@ def analyze_runtime(
     if selected_row is None:
         raise RuntimeError(f"N_SELECTED={selected_n} is not present in runtime_by_N.csv")
 
-    selected_total_time = float(selected_row["total_time"])
+    selected_total_time = (
+        final_selected_total_time
+        if final_selected_total_time is not None
+        else float(selected_row["total_time"])
+    )
+
     if target_lower <= selected_total_time <= target_upper:
-        overall_recommendation = "Selected runtime is already inside the target window. Keep N_SELECTED as the canonical benchmark scale."
         selected_status = "IN_TARGET"
+    elif selected_total_time < target_lower:
+        selected_status = "UNDER_TARGET"
+    else:
+        selected_status = "OVER_TARGET"
+
+    if calibration_mode == "N_PLUS_Q":
+        if target_lower <= selected_total_time <= target_upper:
+            overall_recommendation = (
+                f"N-only calibration was infeasible on the current hardware after reaching N_MAX_FEASIBLE={n_max_feasible}. "
+                f"The benchmark therefore fixed N_SELECTED={selected_n} and escalated Q to {selected_q}, producing total_time={selected_total_time:.8f} seconds inside the 120-180 second target window."
+            )
+        elif selected_status == "UNDER_TARGET":
+            overall_recommendation = (
+                f"N-only calibration was infeasible on the current hardware after reaching N_MAX_FEASIBLE={n_max_feasible}. "
+                f"The benchmark therefore fixed N_SELECTED={selected_n} and escalated Q to {selected_q}, but the final calibrated runtime is still below the target window at {selected_total_time:.8f} seconds."
+            )
+        else:
+            overall_recommendation = (
+                f"N-only calibration was infeasible on the current hardware after reaching N_MAX_FEASIBLE={n_max_feasible}. "
+                f"The benchmark therefore fixed N_SELECTED={selected_n} and escalated Q to {selected_q}, but the final calibrated runtime now exceeds the target window at {selected_total_time:.8f} seconds."
+            )
+    elif target_lower <= selected_total_time <= target_upper:
+        overall_recommendation = "Selected runtime is already inside the target window. Keep N_SELECTED as the canonical benchmark scale."
     elif float(max_n_row["total_time"]) < target_lower:
         overall_recommendation = (
             "Even the largest tested N stays below the 120-180 second target window. Expand BENCH_N_CANDIDATES first; revisit Q only after the N sweep reaches the target runtime band."
         )
-        selected_status = "UNDER_TARGET"
     elif selected_total_time < target_lower:
         overall_recommendation = (
             "The selected runtime is still below the 120-180 second target window. Increase N before changing Q."
         )
-        selected_status = "UNDER_TARGET"
     else:
         overall_recommendation = (
             "The selected runtime exceeds the 120-180 second target window. Reduce N before changing Q."
         )
-        selected_status = "OVER_TARGET"
 
     summary = {
         "selected_n": selected_n,
+        "selected_q": selected_q,
         "selected_total_time": selected_total_time,
         "selected_target_status": selected_status,
+        "calibration_mode": calibration_mode,
+        "n_max_feasible": n_max_feasible,
         "max_tested_n": int(max_n_row["N"]),
         "max_tested_total_time": float(max_n_row["total_time"]),
         "overall_recommendation": overall_recommendation,
@@ -618,7 +650,16 @@ def build_final_conclusion(
     )
 
 
-def prioritized_next_steps() -> list[str]:
+def prioritized_next_steps(calibration_mode: str) -> list[str]:
+    if calibration_mode == "N_PLUS_Q":
+        return [
+            "Priority 1: Keep the current N ceiling explicit in the report; future runtime retuning should revisit memory capacity or sharding strategy before blindly increasing N again.",
+            "Priority 2: Keep P_SELECTED near physical cores and stop treating 2X workers as a canonical operating point if a regression appears.",
+            "Priority 3: Keep the report wording honest about load balance when idle-gap ratio is sensitive but absolute skew is tiny.",
+            "Priority 4: Treat FAISS as a realism baseline; do not promise to outperform it with the current exact blocking MPI design.",
+            "Priority 5: If a future performance phase is approved, focus on communication reduction and orchestration improvements before adding new corpora.",
+        ]
+
     return [
         "Priority 1: Make the runtime benchmark hit the intended 120-180 second target by expanding BENCH_N_CANDIDATES, then revisiting Q only if needed.",
         "Priority 2: Keep P_SELECTED near physical cores and stop treating 2X workers as a canonical operating point if a regression appears.",
@@ -645,7 +686,13 @@ def render_markdown(
     synthetic_faiss_row = next(row for row in faiss_rows if row["dataset_name"] == "synthetic")
     squad_faiss_row = next(row for row in faiss_rows if row["dataset_name"] == "squad_minilm")
 
-    next_steps_lines = "\n".join(f"{index}. {step}" for index, step in enumerate(prioritized_next_steps(), start=1))
+    next_steps_lines = "\n".join(
+        f"{index}. {step}"
+        for index, step in enumerate(
+            prioritized_next_steps(str(runtime_summary["calibration_mode"])),
+            start=1,
+        )
+    )
 
     return f"""# {title}
 
@@ -659,7 +706,7 @@ Do not overclaim: if the status is not `VALID`, treat all performance numbers as
 
 ## 2. Runtime-by-N Findings
 
-Evidence: `N_SELECTED={runtime_summary['selected_n']}` produced `total_time={float(runtime_summary['selected_total_time']):.8f}` seconds with target status `{runtime_summary['selected_target_status']}`. The largest tested N was `{runtime_summary['max_tested_n']}` with `total_time={float(runtime_summary['max_tested_total_time']):.8f}` seconds.
+    Evidence: `N_SELECTED={runtime_summary['selected_n']}` and `Q={runtime_summary['selected_q']}` produced `total_time={float(runtime_summary['selected_total_time']):.8f}` seconds with target status `{runtime_summary['selected_target_status']}`. The largest tested N was `{runtime_summary['max_tested_n']}` with `total_time={float(runtime_summary['max_tested_total_time']):.8f}` seconds under the initial N sweep.
 
 Report-ready statement: {runtime_summary['overall_recommendation']}
 
@@ -757,8 +804,14 @@ def main() -> int:
         speedup_rows = read_speedup_table(required_files["speedup"])
         faiss_rows = read_faiss_comparison_table(required_files["faiss_comparison"])
 
-        runtime_analysis_rows, runtime_summary = analyze_runtime(runtime_rows, selected_n)
         granularity_analysis_rows, granularity_summary = analyze_granularity(granularity_rows)
+        runtime_analysis_rows, runtime_summary = analyze_runtime(
+            runtime_rows,
+            manifest,
+            granularity_summary["global_total_time"]
+            if manifest.get("CALIBRATION_MODE", "N_ONLY") == "N_PLUS_Q"
+            else None,
+        )
         speedup_analysis_rows, speedup_summary = analyze_speedup(speedup_rows)
         faiss_analysis_rows, faiss_summary = analyze_faiss(faiss_rows)
 
@@ -790,7 +843,7 @@ def main() -> int:
             "speedup": speedup_summary,
             "faiss": faiss_summary,
             "final_conclusion": final_conclusion,
-            "next_steps": prioritized_next_steps(),
+            "next_steps": prioritized_next_steps(str(runtime_summary["calibration_mode"])),
             "project_framing": (
                 "The project is valuable as an exact distributed retrieval kernel and benchmarked parallel-computing exercise: it is correctness-gated, it exposes measurable scaling behavior, and it can now be compared honestly against an external FAISS baseline."
             ),

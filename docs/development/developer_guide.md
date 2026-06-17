@@ -420,9 +420,12 @@ bash ./scripts/run_all_experiments.sh
 
 The automation layer now provides:
 
-- `scripts/run_select_N.sh`
+- `scripts/run_calibrate_target.sh`
+  - runs the maintained stage-1 calibration flow
   - generates `results/runtime_by_N.csv`
   - writes `results/benchmark_selection.env`
+- `scripts/run_select_N.sh`
+  - compatibility wrapper that delegates to `run_calibrate_target.sh`
 - `scripts/run_correctness.sh`
   - generates `results/sequential_topk.csv`
   - generates `results/parallel_topk.csv`
@@ -446,9 +449,12 @@ Default benchmark knobs are controlled by environment variables:
 
 - `BENCH_D`
 - `BENCH_Q`
+- `BENCH_Q_CANDIDATES`
 - `BENCH_TOPK`
 - `BENCH_EPSILON`
 - `BENCH_N_CANDIDATES`
+- `BENCH_SPEEDUP_N_CANDIDATES`
+- `BENCH_SPEEDUP_BASELINE_LIMIT`
 - `BENCH_P_SELECTED`
 - `BENCH_P_LIST`
 - `BENCH_BUILD_DIR`
@@ -466,6 +472,8 @@ The repo-local `.venv/` is now reused for both:
 - Phase 8 Python dependencies such as `faiss-cpu`, `pyarrow`, and `sentence-transformers`
 
 Use the repository-local `data/` directory for synthetic outputs produced by development and smoke checks. Reserve `/mnt/e/data` for larger external benchmark corpora and converted real datasets added in later phases.
+
+The benchmark stage scripts now also self-heal older manifests. If `results/benchmark_selection.env` is missing or still uses the older reduced field set, `run_correctness.sh`, `run_granularity.sh`, `run_speedup.sh`, and `run_faiss_comparison.sh` regenerate it through `run_calibrate_target.sh` before continuing.
 
 ## Phase 8 FAISS External Baseline Flow
 
@@ -642,7 +650,8 @@ POSIX shell helpers intended to run inside Ubuntu WSL.
 - `configure_release.sh`: configure the release build tree
 - `run_smoke_tests.sh`: build and run the current repository smoke suite
 - `benchmark_common.sh`: shared benchmark environment/bootstrap helpers
-- `run_select_N.sh`: runtime-by-N selection stage
+- `run_calibrate_target.sh`: maintained calibration stage for `N`, fallback `Q`, and explicit `N_SPEEDUP`
+- `run_select_N.sh`: compatibility wrapper for the calibration stage
 - `run_correctness.sh`: correctness benchmark stage
 - `run_granularity.sh`: granularity/load-balancing benchmark stage
 - `run_speedup.sh`: speedup benchmark stage

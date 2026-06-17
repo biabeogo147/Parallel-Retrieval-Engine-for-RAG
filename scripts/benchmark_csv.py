@@ -182,6 +182,142 @@ def merge_run_metrics(inputs: list[Path], output: Path) -> None:
     write_run_metrics_table(output, rows)
 
 
+def choose_target_row(
+    rows: list[dict[str, float | int]],
+    key_field: str,
+    target_lower: float,
+    target_upper: float,
+) -> tuple[dict[str, float | int], bool]:
+    within_range = [row for row in rows if target_lower <= float(row["total_time"]) <= target_upper]
+    if within_range:
+        return min(within_range, key=lambda row: int(row[key_field])), True
+
+    return min(
+        rows,
+        key=lambda row: (abs(float(row["total_time"]) - 150.0), int(row[key_field])),
+    ), False
+
+
+def has_row_in_target(rows: list[dict[str, float | int]], target_lower: float, target_upper: float) -> bool:
+    return any(target_lower <= float(row["total_time"]) <= target_upper for row in rows)
+
+
+def resolve_calibration_context(
+    n_rows: list[dict[str, float | int]],
+    q_rows: list[dict[str, float | int]] | None,
+    target_lower: float,
+    target_upper: float,
+) -> dict[str, int | str]:
+    if not n_rows:
+        raise RuntimeError("N sweep requires at least one successful runtime row")
+
+    n_selected_row, n_only_hit = choose_target_row(n_rows, "N", target_lower, target_upper)
+    n_max_feasible = max(int(row["N"]) for row in n_rows)
+
+    if n_only_hit:
+        return {
+            "N_SELECTED": int(n_selected_row["N"]),
+            "Q_SELECTED": int(n_selected_row["Q"]),
+            "D": int(n_selected_row["D"]),
+            "K": int(n_selected_row["k"]),
+            "CALIBRATION_MODE": "N_ONLY",
+            "N_MAX_FEASIBLE": n_max_feasible,
+        }
+
+    if not q_rows:
+        raise RuntimeError("Q sweep rows are required when N-only calibration does not hit the target window")
+
+    q_selected_row, _ = choose_target_row(q_rows, "Q", target_lower, target_upper)
+    return {
+        "N_SELECTED": n_max_feasible,
+        "Q_SELECTED": int(q_selected_row["Q"]),
+        "D": int(q_selected_row["D"]),
+        "K": int(q_selected_row["k"]),
+        "CALIBRATION_MODE": "N_PLUS_Q",
+        "N_MAX_FEASIBLE": n_max_feasible,
+    }
+
+
+def select_speedup_n(
+    rows: list[dict[str, float | int]],
+    max_total_time: float,
+) -> int:
+    if not rows:
+        raise RuntimeError("speedup probe rows are required")
+
+    sorted_rows = sorted(rows, key=lambda row: int(row["N"]))
+    fitting_rows = [row for row in sorted_rows if float(row["total_time"]) <= max_total_time]
+    if fitting_rows:
+        return int(fitting_rows[-1]["N"])
+    return int(sorted_rows[0]["N"])
+
+
+def print_calibration_context(
+    n_input: Path,
+    q_input: Path | None,
+    target_lower: float,
+    target_upper: float,
+) -> None:
+    n_rows = [parse_run_metrics_row(row) for row in read_csv_rows(n_input, RUN_METRICS_FIELDS)]
+    q_rows = None
+    if q_input is not None:
+        q_rows = [parse_run_metrics_row(row) for row in read_csv_rows(q_input, RUN_METRICS_FIELDS)]
+
+    context = resolve_calibration_context(n_rows, q_rows, target_lower, target_upper)
+    print(f"N_SELECTED={int(context['N_SELECTED'])}")
+    print(f"Q_SELECTED={int(context['Q_SELECTED'])}")
+    print(f"D={int(context['D'])}")
+    print(f"K={int(context['K'])}")
+    print(f"CALIBRATION_MODE={context['CALIBRATION_MODE']}")
+    print(f"N_MAX_FEASIBLE={int(context['N_MAX_FEASIBLE'])}")
+
+
+def write_calibration_manifest(
+    n_input: Path,
+    q_input: Path | None,
+    speedup_input: Path,
+    output_env: Path,
+    target_lower: float,
+    target_upper: float,
+    p_selected: int,
+    epsilon: str,
+    speedup_baseline_limit: float,
+) -> None:
+    n_rows = [parse_run_metrics_row(row) for row in read_csv_rows(n_input, RUN_METRICS_FIELDS)]
+    q_rows = None
+    if q_input is not None:
+        q_rows = [parse_run_metrics_row(row) for row in read_csv_rows(q_input, RUN_METRICS_FIELDS)]
+
+    context = resolve_calibration_context(n_rows, q_rows, target_lower, target_upper)
+    speedup_rows = [parse_run_metrics_row(row) for row in read_csv_rows(speedup_input, RUN_METRICS_FIELDS)]
+
+    expected_q = int(context["Q_SELECTED"])
+    expected_d = int(context["D"])
+    expected_k = int(context["K"])
+    for row in speedup_rows:
+        if int(row["Q"]) != expected_q or int(row["D"]) != expected_d or int(row["k"]) != expected_k:
+            raise RuntimeError("speedup probe rows must match the calibrated D, Q, and k values")
+
+    n_speedup = select_speedup_n(speedup_rows, speedup_baseline_limit)
+
+    output_env.parent.mkdir(parents=True, exist_ok=True)
+    with output_env.open("w", encoding="utf-8") as handle:
+        handle.write(f"N_SELECTED={int(context['N_SELECTED'])}\n")
+        handle.write(f"N_SPEEDUP={n_speedup}\n")
+        handle.write(f"P_SELECTED={p_selected}\n")
+        handle.write(f"D={expected_d}\n")
+        handle.write(f"Q={expected_q}\n")
+        handle.write(f"K={expected_k}\n")
+        handle.write(f"EPSILON={epsilon}\n")
+        handle.write(f"CALIBRATION_MODE={context['CALIBRATION_MODE']}\n")
+        handle.write(f"N_MAX_FEASIBLE={int(context['N_MAX_FEASIBLE'])}\n")
+
+
+def row_in_target(input_path: Path, target_lower: float, target_upper: float) -> int:
+    rows = [parse_run_metrics_row(row) for row in read_csv_rows(input_path, RUN_METRICS_FIELDS)]
+    return 0 if has_row_in_target(rows, target_lower, target_upper) else 1
+
+
 def select_n(
     input_path: Path,
     output_env: Path,
@@ -194,14 +330,7 @@ def select_n(
     if not rows:
         raise RuntimeError(f"No rows available in {input_path}")
 
-    within_range = [row for row in rows if target_lower <= float(row["total_time"]) <= target_upper]
-    if within_range:
-        selected = min(within_range, key=lambda row: int(row["N"]))
-    else:
-        selected = min(
-            rows,
-            key=lambda row: (abs(float(row["total_time"]) - 150.0), int(row["N"])),
-        )
+    selected, _ = choose_target_row(rows, "N", target_lower, target_upper)
 
     output_env.parent.mkdir(parents=True, exist_ok=True)
     with output_env.open("w", encoding="utf-8") as handle:
@@ -404,6 +533,28 @@ def main() -> None:
     select_parser.add_argument("--p-selected", type=int, required=True)
     select_parser.add_argument("--epsilon", required=True)
 
+    row_in_target_parser = subparsers.add_parser("row-in-target")
+    row_in_target_parser.add_argument("--input", required=True, type=Path)
+    row_in_target_parser.add_argument("--target-lower", type=float, default=120.0)
+    row_in_target_parser.add_argument("--target-upper", type=float, default=180.0)
+
+    print_calibration_parser = subparsers.add_parser("print-calibration-context")
+    print_calibration_parser.add_argument("--n-input", required=True, type=Path)
+    print_calibration_parser.add_argument("--q-input", type=Path)
+    print_calibration_parser.add_argument("--target-lower", type=float, default=120.0)
+    print_calibration_parser.add_argument("--target-upper", type=float, default=180.0)
+
+    write_calibration_parser = subparsers.add_parser("write-calibration-manifest")
+    write_calibration_parser.add_argument("--n-input", required=True, type=Path)
+    write_calibration_parser.add_argument("--q-input", type=Path)
+    write_calibration_parser.add_argument("--speedup-input", required=True, type=Path)
+    write_calibration_parser.add_argument("--output-env", required=True, type=Path)
+    write_calibration_parser.add_argument("--target-lower", type=float, default=120.0)
+    write_calibration_parser.add_argument("--target-upper", type=float, default=180.0)
+    write_calibration_parser.add_argument("--p-selected", type=int, required=True)
+    write_calibration_parser.add_argument("--epsilon", required=True)
+    write_calibration_parser.add_argument("--speedup-baseline-limit", type=float, default=600.0)
+
     speedup_parser = subparsers.add_parser("build-speedup")
     speedup_parser.add_argument("--baseline", required=True, type=Path)
     speedup_parser.add_argument("--output", required=True, type=Path)
@@ -433,6 +584,32 @@ def main() -> None:
             args.target_upper,
             args.p_selected,
             args.epsilon,
+        )
+        return
+
+    if args.command == "row-in-target":
+        raise SystemExit(row_in_target(args.input, args.target_lower, args.target_upper))
+
+    if args.command == "print-calibration-context":
+        print_calibration_context(
+            args.n_input,
+            args.q_input,
+            args.target_lower,
+            args.target_upper,
+        )
+        return
+
+    if args.command == "write-calibration-manifest":
+        write_calibration_manifest(
+            args.n_input,
+            args.q_input,
+            args.speedup_input,
+            args.output_env,
+            args.target_lower,
+            args.target_upper,
+            args.p_selected,
+            args.epsilon,
+            args.speedup_baseline_limit,
         )
         return
 

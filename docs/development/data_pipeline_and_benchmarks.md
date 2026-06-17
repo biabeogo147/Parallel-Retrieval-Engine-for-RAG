@@ -205,12 +205,24 @@ That distinction keeps the report honest and technically clean.
 The current Phase 7 automation layer locks these defaults unless the caller overrides them with environment variables:
 
 - `D = 384`
-- `Q = 100`
+- base `Q = 100` for the initial `N` sweep
+- `Q candidates = {150, 200, 250, 300, 400, 500, 600}` for fallback calibration
 - `k = 10`
 - `epsilon = 1e-5`
-- `N candidates = {100k, 200k, 500k, 1M, 2M}`
+- `N candidates = {4M, 6M, 8M, 10M}`
+- `speedup N candidates = {2M, 3M, 4M, 5M}`
+- `speedup baseline limit = 600` seconds
+- `P_SELECTED = detected physical core count`
 
-The automated `run_all_experiments.sh` flow intentionally uses `Q = 100` instead of `Q = 500` so the runtime-selection and speedup pipeline stays inside a practical WSL development window.
+On the current benchmark machine, the detected physical-core count is `10`, so the maintained final-rerun profile uses `P_SELECTED = 10`.
+
+The automated flow now uses a two-stage calibration policy:
+
+1. sweep `N` first at base `Q = 100`
+2. if no `N` row lands inside the `120-180` second target window, keep the largest successful `N` and escalate `Q`
+3. choose `N_SPEEDUP` separately from explicit sequential probes instead of forcing `2 * N_SELECTED`
+
+This keeps the runtime target realistic on machines where memory capacity prevents an `N`-only sweep from reaching the desired runtime band.
 
 Phase 8 keeps its FAISS comparison workflow separate from `run_all_experiments.sh`. That separation is intentional:
 
@@ -552,13 +564,15 @@ BENCH_P_LIST="1 2 4 8 ... X 2X"
 
 Here `X` means the detected physical core count inside WSL. The scripts keep `BENCH_P_SELECTED` separate from `BENCH_P_LIST` so correctness and granularity can use one canonical process count even when the speedup sweep uses multiple `P` values.
 
-### Runtime-by-N selection stage
+### Calibration stage
 
 Command:
 
 ```bash
-bash ./scripts/run_select_N.sh
+bash ./scripts/run_calibrate_target.sh
 ```
+
+`run_select_N.sh` is still present, but it now acts only as a compatibility wrapper that delegates to `run_calibrate_target.sh`.
 
 Outputs:
 
@@ -571,10 +585,15 @@ The `runtime_by_N.csv` schema is the same `RunMetricsRow` schema:
 N,D,Q,k,P,compute_time,communication_time,total_time
 ```
 
-Selection rule:
+Selection rules:
 
-- choose the smallest `N` whose `total_time` is within `[120, 180]` seconds
-- if no row falls in that range, choose the row with minimum `abs(total_time - 150)`
+1. run the initial `N` sweep at base `Q = 100` and canonical `P_SELECTED`
+2. preserve all successful `N` rows even if a later larger `N` fails or runs out of memory
+3. record `N_MAX_FEASIBLE` as the largest successful `N`
+4. if any `N` row falls in `[120, 180]` seconds, choose the smallest such `N` and keep `Q = 100`
+5. otherwise, fix `N_SELECTED = N_MAX_FEASIBLE` and run a fallback `Q` sweep
+6. in the fallback `Q` sweep, choose the smallest `Q` inside `[120, 180]`; if none qualify, choose the row closest to `150` seconds
+7. after `N_SELECTED` and `Q` are fixed, choose `N_SPEEDUP` separately from explicit sequential baseline probes, subject to the current `600` second baseline limit
 
 The manifest `benchmark_selection.env` stores:
 
@@ -585,8 +604,16 @@ The manifest `benchmark_selection.env` stores:
 - `Q`
 - `K`
 - `EPSILON`
+- `CALIBRATION_MODE`
+- `N_MAX_FEASIBLE`
 
-`N_SPEEDUP` is fixed to `2 * N_SELECTED`.
+Interpretation rules:
+
+- `N_SELECTED` is the canonical synthetic size for correctness, granularity, the synthetic FAISS comparison, and runtime-target reporting
+- `N_SPEEDUP` is the explicit synthetic size chosen only for the speedup sweep
+- `CALIBRATION_MODE = N_ONLY` means the initial `N` sweep reached the target window without changing `Q`
+- `CALIBRATION_MODE = N_PLUS_Q` means `N` alone was insufficient on the current hardware, so the final runtime target used `Q` escalation
+- `N_MAX_FEASIBLE` is the largest successful `N` observed before the first failed or omitted larger candidate
 
 ### Correctness stage
 
@@ -602,7 +629,7 @@ Outputs:
 - `results/parallel_topk.csv`
 - `results/correctness.csv`
 
-This stage loads `benchmark_selection.env`, runs the canonical sequential and parallel retrieval commands, then calls `verify_results`. The script fails immediately if `verify_results` does not return exit code `0`.
+This stage loads `benchmark_selection.env`, runs the canonical sequential and parallel retrieval commands, then calls `verify_results`. If the manifest is missing or still uses the older incomplete schema, the script regenerates it through the calibration stage first. The script fails immediately if `verify_results` does not return exit code `0`.
 
 ### Granularity stage
 
@@ -656,11 +683,13 @@ bash ./scripts/run_all_experiments.sh
 
 This orchestration script runs:
 
-1. `run_select_N.sh`
+1. `run_calibrate_target.sh`
 2. `run_correctness.sh`
 3. `run_granularity.sh`
 4. `run_speedup.sh`
 5. `plot_results.py`
+
+`run_select_N.sh` remains available as a compatibility wrapper, but the maintained stage-1 entrypoint is now `run_calibrate_target.sh`.
 
 The plotting layer uses a repo-local `.venv/` plus `matplotlib` and runs headless through backend `Agg`.
 
@@ -772,7 +801,7 @@ bash ./scripts/run_faiss_comparison.sh
 
 This script:
 
-1. loads or generates `results/benchmark_selection.env`
+1. loads a complete `results/benchmark_selection.env` or regenerates it through the calibration stage if the file is missing or stale
 2. runs sequential retrieval on the selected synthetic dataset
 3. runs parallel retrieval on the selected synthetic dataset
 4. runs FAISS on the same synthetic dataset

@@ -88,7 +88,7 @@ If you run the benchmark scripts with a custom `BENCH_RESULTS_DIR`, the filename
 | `results/faiss/*_correctness.csv` | `verify_results` | one row per query | sequential-versus-FAISS correctness verdict |
 | `sequential_run_metrics.csv` | `sequential_retriever --run-metrics` | one row per run | benchmark summary for one sequential run |
 | `parallel_run_metrics.csv` | `parallel_retriever --run-metrics` | one row per run | benchmark summary for one parallel run |
-| `runtime_by_N.csv` | `run_select_N.sh` | one row per tested `N` value | runtime sweep used to choose `N_SELECTED` |
+| `runtime_by_N.csv` | `run_calibrate_target.sh` | one row per tested `N` value from the initial `N` sweep | runtime sweep used to choose `N_SELECTED` or trigger fallback `Q` calibration |
 | `granularity.csv` | `run_granularity.sh` | one row per MPI rank | canonical per-rank benchmark metrics artifact |
 | `speedup.csv` | `run_speedup.sh` | one row per process count `P` | final speedup and efficiency table |
 | `results/faiss/*_run_metrics.csv` | `faiss_compare.py` | one row per run | Phase 8 FAISS run-summary table |
@@ -624,9 +624,10 @@ Use them when you need one compact benchmark row describing a full invocation.
 
 #### `runtime_by_N.csv`
 
-- produced by `run_select_N.sh`
+- produced by `run_calibrate_target.sh`
 - contains multiple rows
 - each row is a parallel benchmark summary for one tested memory size `N`
+- this file records only the initial `N` sweep; if the final manifest uses `CALIBRATION_MODE=N_PLUS_Q`, the selected runtime target was reached later by increasing `Q`, not by adding extra rows here
 
 ### Column-by-column explanation
 
@@ -1360,9 +1361,17 @@ These are not CSV files, but they often appear next to the CSV outputs and are e
 
 ### `benchmark_selection.env`
 
-- shell-style manifest produced by `run_select_N.sh`
-- stores values such as `N_SELECTED`, `N_SPEEDUP`, `P_SELECTED`, `D`, `Q`, `K`, and `EPSILON`
+- shell-style manifest produced by `run_calibrate_target.sh`
+- stores `N_SELECTED`, `N_SPEEDUP`, `P_SELECTED`, `D`, `Q`, `K`, `EPSILON`, `CALIBRATION_MODE`, and `N_MAX_FEASIBLE`
 - consumed by later benchmark scripts
+
+Useful reading rules:
+
+- `N_SELECTED` is the canonical dataset size for correctness, granularity, and the synthetic FAISS path
+- `N_SPEEDUP` is the separate speedup-only dataset size
+- `CALIBRATION_MODE=N_ONLY` means the target runtime was reached during the initial `N` sweep
+- `CALIBRATION_MODE=N_PLUS_Q` means the runtime target needed `Q` escalation after the largest feasible `N` was still too small
+- `N_MAX_FEASIBLE` is the largest successful `N` from the initial `N` sweep
 
 ### `granularity_summary.txt`
 

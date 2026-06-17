@@ -72,6 +72,72 @@ def read_binary_dataset(path: Path) -> BinaryDatasetContents:
     return BinaryDatasetContents(header=header, values=values)
 
 
+def read_binary_dataset_header(path: Path) -> BinaryDatasetHeader:
+    actual_size = path.stat().st_size
+    if actual_size < HEADER_STRUCT.size:
+        raise RuntimeError(f"truncated dataset header: {path}")
+
+    with path.open("rb") as handle:
+        raw_header = handle.read(HEADER_STRUCT.size)
+        magic, version, flags, num_vectors, dimension, reserved0 = HEADER_STRUCT.unpack(raw_header)
+
+    header = BinaryDatasetHeader(
+        magic=magic,
+        version=version,
+        flags=flags,
+        num_vectors=num_vectors,
+        dimension=dimension,
+        reserved0=reserved0,
+    )
+    validate_header(header)
+
+    expected_values = num_vectors * dimension
+    expected_size = HEADER_STRUCT.size + expected_values * 4
+    if actual_size < expected_size:
+        raise RuntimeError(f"truncated dataset payload: {path}")
+    if actual_size > expected_size:
+        raise RuntimeError(f"dataset payload size is inconsistent with header metadata: {path}")
+
+    return header
+
+
+def resolve_faiss_batch_rows(dimension: int) -> int:
+    if dimension <= 0:
+        raise RuntimeError("dataset dimension must be positive")
+
+    batch_rows_override = os.environ.get("PHASE8_FAISS_BATCH_ROWS", "").strip()
+    if batch_rows_override:
+        batch_rows = int(batch_rows_override)
+        if batch_rows < 1:
+            raise RuntimeError("PHASE8_FAISS_BATCH_ROWS must be at least 1")
+        return batch_rows
+
+    target_batch_bytes = 128 * 1024 * 1024
+    bytes_per_row = dimension * 4
+    return max(1, target_batch_bytes // bytes_per_row)
+
+
+def iter_binary_dataset_batches(path: Path, batch_rows: int):
+    np = _import_numpy()
+    header = read_binary_dataset_header(path)
+    if batch_rows < 1:
+        raise RuntimeError("batch_rows must be at least 1")
+
+    values = np.memmap(
+        path,
+        dtype="<f4",
+        mode="r",
+        offset=HEADER_STRUCT.size,
+        shape=(header.num_vectors, header.dimension),
+        order="C",
+    )
+
+    for start in range(0, header.num_vectors, batch_rows):
+        stop = min(start + batch_rows, header.num_vectors)
+        # Materialize only one contiguous batch at a time before handing it to FAISS.
+        yield np.ascontiguousarray(values[start:stop], dtype=np.float32)
+
+
 def validate_header(header: BinaryDatasetHeader) -> None:
     if header.magic != MAGIC:
         raise RuntimeError("invalid dataset magic")

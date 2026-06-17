@@ -7,6 +7,9 @@ script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
 init_benchmark_env
 ensure_benchmark_dirs
+if ! selection_manifest_is_complete "$selection_env_path"; then
+    "$script_dir/run_calibrate_target.sh"
+fi
 load_selection_env
 
 require_benchmark_binary generate_vectors

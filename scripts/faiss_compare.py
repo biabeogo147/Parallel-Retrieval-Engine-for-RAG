@@ -32,24 +32,28 @@ def main() -> int:
         import faiss
 
         from phase8_common import (
+            iter_binary_dataset_batches,
             read_binary_dataset,
+            read_binary_dataset_header,
+            resolve_faiss_batch_rows,
             validate_retrieval_inputs,
             write_phase8_run_metrics_csv,
             write_topk_csv,
         )
 
-        memory_dataset = read_binary_dataset(args.vectors)
+        memory_header = read_binary_dataset_header(args.vectors)
         query_dataset = read_binary_dataset(args.queries)
-        validate_retrieval_inputs(memory_dataset.header, query_dataset.header, args.topk)
+        validate_retrieval_inputs(memory_header, query_dataset.header, args.topk)
 
-        memory_matrix = memory_dataset.values
         query_matrix = query_dataset.values
+        batch_rows = resolve_faiss_batch_rows(memory_header.dimension)
 
         faiss.omp_set_num_threads(args.threads)
 
         build_start = time.perf_counter()
-        index = faiss.IndexFlatIP(int(memory_dataset.header.dimension))
-        index.add(memory_matrix)
+        index = faiss.IndexFlatIP(int(memory_header.dimension))
+        for batch in iter_binary_dataset_batches(args.vectors, batch_rows):
+            index.add(batch)
         build_time = time.perf_counter() - build_start
 
         compute_start = time.perf_counter()
@@ -60,8 +64,8 @@ def main() -> int:
         write_phase8_run_metrics_csv(
             args.output_metrics,
             args.dataset_name,
-            memory_dataset.header.num_vectors,
-            memory_dataset.header.dimension,
+            memory_header.num_vectors,
+            memory_header.dimension,
             query_dataset.header.num_vectors,
             args.topk,
             args.threads,

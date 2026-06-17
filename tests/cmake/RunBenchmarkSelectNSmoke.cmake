@@ -27,6 +27,8 @@ execute_process(
         "BENCH_TOPK=3"
         "BENCH_EPSILON=1e-5"
         "BENCH_N_CANDIDATES=64 128"
+        "BENCH_Q_CANDIDATES=5"
+        "BENCH_SPEEDUP_N_CANDIDATES=64"
         "BENCH_P_SELECTED=4"
         bash
         "${REPO_ROOT}/scripts/run_select_N.sh"
@@ -61,7 +63,7 @@ if(NOT runtime_header STREQUAL "N,D,Q,k,P,compute_time,communication_time,total_
 endif()
 
 file(READ "${selection_path}" selection_text)
-foreach(required_entry "N_SELECTED=" "N_SPEEDUP=" "P_SELECTED=4" "D=8" "Q=5" "K=3" "EPSILON=1e-5")
+foreach(required_entry "N_SELECTED=" "N_SPEEDUP=64" "P_SELECTED=4" "D=8" "Q=5" "K=3" "EPSILON=1e-5" "CALIBRATION_MODE=" "N_MAX_FEASIBLE=")
     string(FIND "${selection_text}" "${required_entry}" entry_index)
     if(entry_index EQUAL -1)
         message(FATAL_ERROR "missing selection entry ${required_entry} in:\n${selection_text}")

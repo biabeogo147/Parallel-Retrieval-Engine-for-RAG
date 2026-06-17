@@ -8,7 +8,7 @@ script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 init_benchmark_env
 ensure_benchmark_dirs
 
-"$script_dir/run_select_N.sh"
+"$script_dir/run_calibrate_target.sh"
 "$script_dir/run_correctness.sh"
 "$script_dir/run_granularity.sh"
 "$script_dir/run_speedup.sh"

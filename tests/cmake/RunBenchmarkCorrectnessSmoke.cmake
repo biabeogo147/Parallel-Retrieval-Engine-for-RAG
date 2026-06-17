@@ -27,6 +27,8 @@ execute_process(
         "BENCH_TOPK=3"
         "BENCH_EPSILON=1e-5"
         "BENCH_N_CANDIDATES=64 128"
+        "BENCH_Q_CANDIDATES=5"
+        "BENCH_SPEEDUP_N_CANDIDATES=64"
         "BENCH_P_SELECTED=4"
         bash
         "${REPO_ROOT}/scripts/run_select_N.sh"

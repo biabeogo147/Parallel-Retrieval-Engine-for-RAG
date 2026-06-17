@@ -67,9 +67,12 @@ init_benchmark_env() {
     bench_faiss_results_dir=${BENCH_FAISS_RESULTS_DIR:-"${bench_results_dir}/faiss"}
     bench_d=${BENCH_D:-384}
     bench_q=${BENCH_Q:-100}
+    bench_q_candidates=${BENCH_Q_CANDIDATES:-"150 200 250 300 400 500 600"}
     bench_topk=${BENCH_TOPK:-10}
     bench_epsilon=${BENCH_EPSILON:-1e-5}
-    bench_n_candidates=${BENCH_N_CANDIDATES:-"100000 200000 500000 1000000 2000000"}
+    bench_n_candidates=${BENCH_N_CANDIDATES:-"4000000 6000000 8000000 10000000"}
+    bench_speedup_n_candidates=${BENCH_SPEEDUP_N_CANDIDATES:-"2000000 3000000 4000000 5000000"}
+    bench_speedup_baseline_limit=${BENCH_SPEEDUP_BASELINE_LIMIT:-600}
     bench_p_selected=${BENCH_P_SELECTED:-$(detect_physical_cores)}
     bench_p_list=${BENCH_P_LIST:-$(generate_default_p_list "$bench_p_selected")}
     selection_env_path="${bench_results_dir}/benchmark_selection.env"
@@ -87,9 +90,12 @@ init_benchmark_env() {
     export bench_faiss_results_dir
     export bench_d
     export bench_q
+    export bench_q_candidates
     export bench_topk
     export bench_epsilon
     export bench_n_candidates
+    export bench_speedup_n_candidates
+    export bench_speedup_baseline_limit
     export bench_p_selected
     export bench_p_list
     export selection_env_path
@@ -105,6 +111,21 @@ ensure_benchmark_dirs() {
     mkdir -p "$bench_results_dir" "$bench_scratch_dir" "$bench_figures_dir" "$bench_faiss_results_dir"
 }
 
+selection_manifest_is_complete() {
+    manifest_path=${1:-"$selection_env_path"}
+    if [ ! -f "$manifest_path" ]; then
+        return 1
+    fi
+
+    for required_name in N_SELECTED N_SPEEDUP P_SELECTED D Q K EPSILON CALIBRATION_MODE N_MAX_FEASIBLE; do
+        if ! grep -Eq "^${required_name}=.+" "$manifest_path"; then
+            return 1
+        fi
+    done
+
+    return 0
+}
+
 require_benchmark_binary() {
     binary_name=$1
     binary_path="$bench_build_dir/$binary_name"
@@ -115,7 +136,12 @@ require_benchmark_binary() {
 }
 
 query_dataset_path() {
-    echo "$bench_scratch_dir/query_vectors_Q${bench_q}_D${bench_d}.bin"
+    query_dataset_path_for_q "$bench_q"
+}
+
+query_dataset_path_for_q() {
+    query_q=$1
+    echo "$bench_scratch_dir/query_vectors_Q${query_q}_D${bench_d}.bin"
 }
 
 memory_dataset_path() {
@@ -125,9 +151,15 @@ memory_dataset_path() {
 
 ensure_query_dataset() {
     query_path=$1
+    ensure_query_dataset_for_q "$bench_q" "$query_path"
+}
+
+ensure_query_dataset_for_q() {
+    query_q=$1
+    query_path=$2
     if [ ! -f "$query_path" ]; then
         "$bench_build_dir/generate_queries" \
-            --Q "$bench_q" \
+            --Q "$query_q" \
             --D "$bench_d" \
             --output "$query_path"
     fi
@@ -218,6 +250,14 @@ load_selection_env() {
     # shellcheck disable=SC1090
     . "$selection_env_path"
 
+    for required_name in N_SELECTED N_SPEEDUP P_SELECTED D Q K EPSILON CALIBRATION_MODE N_MAX_FEASIBLE; do
+        eval "required_value=\${${required_name}:-}"
+        if [ -z "$required_value" ]; then
+            echo "Missing required benchmark selection value: $required_name" >&2
+            exit 1
+        fi
+    done
+
     if [ -n "${D:-}" ]; then
         bench_d=$D
     fi
@@ -239,6 +279,8 @@ load_selection_env() {
     export bench_topk
     export bench_epsilon
     export bench_p_selected
+    export CALIBRATION_MODE
+    export N_MAX_FEASIBLE
 }
 
 ensure_plot_python() {

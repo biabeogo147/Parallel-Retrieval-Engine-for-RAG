@@ -325,6 +325,24 @@ if(BUILD_TESTING)
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/RunBenchmarkSelectNSmoke.cmake
     )
     add_test(
+        NAME benchmark_calibrate_target_n_only_smoke
+        COMMAND
+            ${CMAKE_COMMAND}
+            -DREPO_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/phase7_calibrate_n_only_smoke
+            -P
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/RunBenchmarkCalibrateTargetNOnlySmoke.cmake
+    )
+    add_test(
+        NAME benchmark_calibrate_target_n_plus_q_smoke
+        COMMAND
+            ${CMAKE_COMMAND}
+            -DREPO_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/phase7_calibrate_n_plus_q_smoke
+            -P
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/RunBenchmarkCalibrateTargetNPlusQSmoke.cmake
+    )
+    add_test(
         NAME benchmark_correctness_script_smoke
         COMMAND
             ${CMAKE_COMMAND}
@@ -411,5 +429,14 @@ if(BUILD_TESTING)
             -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/analysis_missing_input
             -P
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/RunBenchmarkAnalysisMissingInputFail.cmake
+    )
+    add_test(
+        NAME benchmark_analysis_calibration_aware_smoke
+        COMMAND
+            ${CMAKE_COMMAND}
+            -DREPO_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/analysis_calibration_aware
+            -P
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/RunBenchmarkAnalysisCalibrationAwareSmoke.cmake
     )
 endif()

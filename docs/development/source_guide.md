@@ -70,18 +70,19 @@ If you want the fastest path to understanding, read the source in this order:
 24. `include/BenchmarkMetrics.hpp`
 25. `src/BenchmarkMetrics.cpp`
 26. `scripts/benchmark_common.sh`
-27. `scripts/run_select_N.sh`
-28. `scripts/run_correctness.sh`
-29. `scripts/run_granularity.sh`
-30. `scripts/run_speedup.sh`
-31. `scripts/run_all_experiments.sh`
-32. `scripts/run_faiss_comparison.sh`
-33. `scripts/phase8_common.py`
-34. `scripts/faiss_compare.py`
-35. `scripts/prepare_squad_minilm.py`
-36. `scripts/benchmark_csv.py`
-37. `scripts/analyze_benchmarks.py`
-38. `scripts/plot_results.py`
+27. `scripts/run_calibrate_target.sh`
+28. `scripts/run_select_N.sh`
+29. `scripts/run_correctness.sh`
+30. `scripts/run_granularity.sh`
+31. `scripts/run_speedup.sh`
+32. `scripts/run_all_experiments.sh`
+33. `scripts/run_faiss_comparison.sh`
+34. `scripts/phase8_common.py`
+35. `scripts/faiss_compare.py`
+36. `scripts/prepare_squad_minilm.py`
+37. `scripts/benchmark_csv.py`
+38. `scripts/analyze_benchmarks.py`
+39. `scripts/plot_results.py`
 39. `tests/BenchmarkMetricsTest.cpp`
 40. `tests/CorrectnessCheckerTest.cpp`
 41. `tests/SequentialRetrieverTest.cpp`
@@ -512,10 +513,14 @@ Phase 7 keeps experiment orchestration in WSL-first scripts instead of adding a 
 
 ### What they do
 
-- `run_select_N.sh`
+- `run_calibrate_target.sh`
   - sweeps candidate `N` values
+  - falls back to a `Q` sweep when `N` alone cannot reach the runtime target
+  - chooses an explicit `N_SPEEDUP` from sequential baseline probes
   - writes `runtime_by_N.csv`
   - writes `benchmark_selection.env`
+- `run_select_N.sh`
+  - delegates to `run_calibrate_target.sh` for compatibility with earlier docs and scripts
 - `run_correctness.sh`
   - runs sequential retrieval, parallel retrieval, and `verify_results`
   - writes the canonical correctness artifacts under `results/`
@@ -535,7 +540,7 @@ Phase 7 keeps experiment orchestration in WSL-first scripts instead of adding a 
 
 This project now has a complete synthetic benchmark loop:
 
-1. choose `N`
+1. calibrate `N`, and escalate `Q` only if needed
 2. verify correctness
 3. inspect load balance
 4. measure speedup
@@ -610,7 +615,7 @@ This script is the orchestration layer for the Phase 8 baseline experiment.
 It:
 
 1. loads the benchmark environment through `benchmark_common.sh`
-2. reuses `benchmark_selection.env` or generates it if missing
+2. reuses a complete `benchmark_selection.env` or regenerates it if the file is missing or still uses the older schema
 3. runs:
    - sequential retrieval
    - parallel retrieval
@@ -764,7 +769,8 @@ The `tests/cmake/*.cmake` scripts validate executable-level behavior:
 - `verify_results` returns `2` on malformed CSV input
 - sequential `--run-metrics` writes the exact one-row summary schema
 - parallel `--run-metrics` writes the exact one-row summary schema
-- `run_select_N.sh` writes `runtime_by_N.csv` and `benchmark_selection.env`
+- `run_calibrate_target.sh` writes `runtime_by_N.csv`, a complete `benchmark_selection.env`, and the correct calibration-mode semantics
+- `run_select_N.sh` still works as a compatibility wrapper
 - `run_correctness.sh` writes the expected correctness artifacts
 - `run_granularity.sh` writes `granularity.csv` and a summary note
 - `run_speedup.sh` writes `speedup.csv` with a sequential `P = 1` baseline row
@@ -1021,11 +1027,21 @@ Use this file when you want to answer: "What exactly is this file responsible fo
 
 - defines the shared shell environment, dataset-cache paths, `mpirun` wrapper, and helper functions reused by benchmark and Phase 8 scripts
 
+## `scripts/run_calibrate_target.sh`
+
+**Responsibility**
+
+- runs the maintained stage-1 benchmark calibration flow:
+  - `N` sweep at base `Q`
+  - fallback `Q` sweep when needed
+  - explicit `N_SPEEDUP` selection from sequential probes
+- writes `runtime_by_N.csv` and a complete `benchmark_selection.env`
+
 ## `scripts/run_select_N.sh`
 
 **Responsibility**
 
-- runs the runtime-by-`N` sweep and writes `runtime_by_N.csv` plus `benchmark_selection.env`
+- compatibility wrapper that delegates to `run_calibrate_target.sh`
 
 ## `scripts/run_correctness.sh`
 
@@ -1055,7 +1071,7 @@ Use this file when you want to answer: "What exactly is this file responsible fo
 
 **Responsibility**
 
-- implements focused CSV aggregation commands for selection, speedup, granularity summaries, and the Phase 8 FAISS comparison table
+- implements focused CSV aggregation commands for calibration selection, manifest writing, speedup construction, granularity summaries, and the Phase 8 FAISS comparison table
 
 ## `scripts/analyze_benchmarks.py`
 
@@ -1315,6 +1331,7 @@ Use this file when you want to answer: "What exactly is this file responsible fo
   - `tools/verify_results.cpp`
 - benchmark automation:
   - `scripts/benchmark_common.sh`
+  - `scripts/run_calibrate_target.sh`
   - `scripts/run_select_N.sh`
   - `scripts/run_correctness.sh`
   - `scripts/run_granularity.sh`

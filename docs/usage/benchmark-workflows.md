@@ -37,10 +37,13 @@ These are the current public script knobs exposed by `scripts/benchmark_common.s
 | `BENCH_RESULTS_DIR` | final benchmark output directory | `$repo_root/results` |
 | `BENCH_SCRATCH_DIR` | scratch datasets and intermediate CSVs | `$repo_root/.cache/benchmarks` |
 | `BENCH_D` | vector dimension | `384` |
-| `BENCH_Q` | query count | `100` |
+| `BENCH_Q` | base query count for the initial `N` sweep | `100` |
+| `BENCH_Q_CANDIDATES` | fallback `Q` values used when `N` alone cannot hit the runtime target | `150 200 250 300 400 500 600` |
 | `BENCH_TOPK` | retrieval top-k | `10` |
 | `BENCH_EPSILON` | correctness epsilon | `1e-5` |
-| `BENCH_N_CANDIDATES` | candidate `N` values for selection | `100000 200000 500000 1000000 2000000` |
+| `BENCH_N_CANDIDATES` | candidate `N` values for the initial calibration sweep | `4000000 6000000 8000000 10000000` |
+| `BENCH_SPEEDUP_N_CANDIDATES` | candidate `N` values for explicit sequential speedup-baseline probing | `2000000 3000000 4000000 5000000` |
+| `BENCH_SPEEDUP_BASELINE_LIMIT` | maximum allowed sequential `total_time` when choosing `N_SPEEDUP` | `600` |
 | `BENCH_P_SELECTED` | canonical process count for selection, correctness, and granularity | detected physical core count |
 | `BENCH_P_LIST` | process counts used for the speedup sweep | generated as `1 2 4 ... X 2X` |
 | `BENCH_PLOT_VENV_DIR` | plotting virtual environment path | `$repo_root/.venv` |
@@ -53,7 +56,7 @@ These are the current public script knobs exposed by `scripts/benchmark_common.s
 
 ## `benchmark_selection.env`
 
-`run_select_N.sh` writes a manifest at:
+`run_calibrate_target.sh` writes a manifest at:
 
 ```text
 results/benchmark_selection.env
@@ -68,8 +71,20 @@ That file currently stores:
 - `Q`
 - `K`
 - `EPSILON`
+- `CALIBRATION_MODE`
+- `N_MAX_FEASIBLE`
+
+Interpretation rules:
+
+- `N_SELECTED` is the canonical synthetic size used for correctness, granularity, the synthetic FAISS path, and runtime-target reporting.
+- `N_SPEEDUP` is the explicit synthetic size used only by `run_speedup.sh`.
+- `CALIBRATION_MODE = N_ONLY` means the runtime target was reached during the initial `N` sweep at base `Q`.
+- `CALIBRATION_MODE = N_PLUS_Q` means the largest feasible `N` was still insufficient, so the calibration stage intentionally escalated `Q`.
+- `N_MAX_FEASIBLE` is the largest successful `N` observed during the initial `N` sweep.
 
 The later stage scripts load this file automatically. In the normal flow, do not edit it by hand.
+
+`run_select_N.sh` is still available, but it now acts only as a compatibility wrapper around `run_calibrate_target.sh`.
 
 For a detailed explanation of the CSV files produced by these stages, including every output column, see [results-csv-reference.md](results-csv-reference.md).
 
@@ -111,7 +126,7 @@ bash ./scripts/run_all_experiments.sh
 - If you also need the Phase 8 external baseline, run `bash ./scripts/run_faiss_comparison.sh` afterward.
 - After the raw benchmark and FAISS outputs exist, run the analysis layer described in section 10.
 
-## 2. Stage: Runtime-By-N Selection
+## 2. Stage: Runtime Calibration
 
 **Prerequisites**
 
@@ -120,7 +135,7 @@ bash ./scripts/run_all_experiments.sh
 **Bash**
 
 ```bash
-bash ./scripts/run_select_N.sh
+bash ./scripts/run_calibrate_target.sh
 ```
 
 **Expected artifacts**
@@ -134,6 +149,13 @@ bash ./scripts/run_select_N.sh
   - `Wrote .../runtime_by_N.csv`
   - `Wrote .../benchmark_selection.env`
 
+**What this stage actually decides**
+
+- It runs the initial `N` sweep at base `Q = 100` unless you override `BENCH_Q`.
+- If one row lands inside `120-180` seconds, it keeps the smallest such `N` and records `CALIBRATION_MODE=N_ONLY`.
+- If no `N` row lands inside that window, it keeps `N_MAX_FEASIBLE`, runs the fallback `Q` sweep, and records `CALIBRATION_MODE=N_PLUS_Q`.
+- It then picks `N_SPEEDUP` separately from the explicit sequential probe candidates instead of forcing `2 * N_SELECTED`.
+
 **Next step**
 
 - Run correctness or granularity on the selected `N`.
@@ -142,7 +164,7 @@ bash ./scripts/run_select_N.sh
 
 **Prerequisites**
 
-- `results/benchmark_selection.env` already exists from `run_select_N.sh`.
+- `results/benchmark_selection.env` already exists from `run_calibrate_target.sh` or `run_all_experiments.sh`.
 
 **Bash**
 
@@ -169,7 +191,7 @@ bash ./scripts/run_correctness.sh
 
 **Prerequisites**
 
-- `results/benchmark_selection.env` already exists from `run_select_N.sh`.
+- `results/benchmark_selection.env` already exists from `run_calibrate_target.sh` or `run_all_experiments.sh`.
 
 **Bash**
 
@@ -195,7 +217,7 @@ bash ./scripts/run_granularity.sh
 
 **Prerequisites**
 
-- `results/benchmark_selection.env` already exists from `run_select_N.sh`.
+- `results/benchmark_selection.env` already exists from `run_calibrate_target.sh` or `run_all_experiments.sh`.
 
 **Bash**
 
@@ -232,6 +254,8 @@ BENCH_D=8 \
 BENCH_Q=5 \
 BENCH_TOPK=3 \
 BENCH_N_CANDIDATES="64 128" \
+BENCH_Q_CANDIDATES="20 40" \
+BENCH_SPEEDUP_N_CANDIDATES="64" \
 BENCH_P_SELECTED=4 \
 BENCH_P_LIST="2 4" \
 BENCH_RESULTS_DIR=results/smoke \
@@ -430,6 +454,7 @@ python3 ./scripts/analyze_benchmarks.py \
 
 - `run_all_experiments.sh` is the only script that bootstraps the plotting virtual environment and generates figures.
 - The stage scripts reuse or generate synthetic datasets under the benchmark scratch directory automatically.
+- If `benchmark_selection.env` is missing or still follows the older reduced schema, the stage scripts regenerate it through `run_calibrate_target.sh` automatically.
 - If you change `BENCH_RESULTS_DIR` or `BENCH_SCRATCH_DIR`, remember to inspect or clean those custom paths later instead of the defaults.
 - `run_all_experiments.sh` remains synthetic-only by design.
 - `run_faiss_comparison.sh` reuses the same `.venv/` directory for FAISS and real-corpus conversion dependencies.

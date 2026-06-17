@@ -27,6 +27,8 @@ execute_process(
         "BENCH_TOPK=3"
         "BENCH_EPSILON=1e-5"
         "BENCH_N_CANDIDATES=64 128"
+        "BENCH_Q_CANDIDATES=150 200"
+        "BENCH_SPEEDUP_N_CANDIDATES=64"
         "BENCH_P_SELECTED=4"
         "BENCH_P_LIST=2 4"
         bash
@@ -42,6 +44,7 @@ endif()
 
 foreach(required_path
     "${results_dir}/runtime_by_N.csv"
+    "${results_dir}/benchmark_selection.env"
     "${results_dir}/correctness.csv"
     "${results_dir}/granularity.csv"
     "${results_dir}/speedup.csv"
@@ -53,3 +56,19 @@ foreach(required_path
         message(FATAL_ERROR "expected benchmark artifact was not created: ${required_path}")
     endif()
 endforeach()
+
+file(READ "${results_dir}/benchmark_selection.env" selection_text)
+foreach(required_entry "N_SPEEDUP=64" "CALIBRATION_MODE=N_PLUS_Q" "Q=200")
+    string(FIND "${selection_text}" "${required_entry}" entry_index)
+    if(entry_index EQUAL -1)
+        message(FATAL_ERROR "missing calibrated selection entry ${required_entry} in:\n${selection_text}")
+    endif()
+endforeach()
+
+file(STRINGS "${results_dir}/speedup.csv" speedup_lines)
+list(GET speedup_lines 1 baseline_row)
+string(REPLACE "," ";" baseline_fields "${baseline_row}")
+list(GET baseline_fields 0 baseline_n)
+if(NOT baseline_n STREQUAL "64")
+    message(FATAL_ERROR "expected calibrated speedup baseline to use explicit N_SPEEDUP=64, got: ${baseline_row}")
+endif()
