@@ -424,7 +424,7 @@ stage_runtime_calibration
 stage_selected_synthetic_run
 stage_granularity
 stage_speedup
-stage_faiss
+# stage_faiss
 stage_postprocess
 
 echo "Cluster bundle completed at $bench_results_dir"
