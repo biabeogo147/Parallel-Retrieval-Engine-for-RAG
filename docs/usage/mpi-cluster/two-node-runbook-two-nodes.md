@@ -445,155 +445,7 @@ bash ./scripts/run_cluster_two_node_bundle.sh \
   - `faiss/squad_correctness.csv`
   record only `PASS`
 
-### Validated expedited no-FAISS finish for the current machine
-
-The validated final rerun on `2026-06-23` did not restart from zero after the operator decided to skip FAISS. Instead, it reused the finished calibration outputs from the same run tag:
-
-- run tag:
-  - `2026-06-23-two-nodes-e-root-final`
-- selected synthetic benchmark point:
-  - `N_SELECTED=10000000`
-  - `Q=400`
-  - `CALIBRATION_MODE=N_PLUS_Q`
-- selected parallel timing:
-  - `10000000,384,400,10,14,137.86811244,20.44452541,144.11783635`
-- selected sequential timing:
-  - `10000000,384,400,10,1,792.45887554,0.00000000,792.45887554`
-- expedited speedup scale used for the same rerun:
-  - `N_SPEEDUP=2000000`
-
-Use this recovery path when:
-
-- Stage 1 calibration has already finished for the run tag
-- the operator wants to skip FAISS rather than waiting for the full six-stage wrapper
-- the goal is to finish correctness, speedup, figures, and analysis from the same run tag without regenerating the earlier calibration outputs
-
-### Bash
-
-```bash
-cd ~/work/Parallel-Retrieval-Engine-for-RAG
-RUN_TAG=2026-06-23-two-nodes-e-root-final
-RESULT_DIR=$HOME/data/pdp_retrieve_engineresults/cluster/${RUN_TAG}
-PROBE_DIR=$HOME/data/pdp_retrieve_enginescratch/cluster_bundle/${RUN_TAG}/probes
-
-mkdir -p "${RESULT_DIR}"
-
-# Reuse the selected Q=400 parallel artifacts from calibration.
-cp "${PROBE_DIR}/calibration_parallel_topk_N10000000_Q400.csv" "${RESULT_DIR}/parallel_topk.csv"
-cp "${PROBE_DIR}/calibration_parallel_metrics_N10000000_Q400.csv" "${RESULT_DIR}/parallel_metrics.csv"
-cp "${PROBE_DIR}/calibration_parallel_run_metrics_N10000000_Q400.csv" "${RESULT_DIR}/parallel_run_metrics.csv"
-cp "${RESULT_DIR}/parallel_metrics.csv" "${RESULT_DIR}/granularity.csv"
-
-python3 - <<'PY'
-from pathlib import Path
-result_dir = Path("$HOME/data/pdp_retrieve_engineresults/cluster/2026-06-23-two-nodes-e-root-final")
-result_dir.joinpath("benchmark_selection.env").write_text(
-    "N_SELECTED=10000000\n"
-    "N_SPEEDUP=2000000\n"
-    "P_SELECTED=14\n"
-    "D=384\n"
-    "Q=400\n"
-    "K=10\n"
-    "EPSILON=1e-5\n"
-    "CALIBRATION_MODE=N_PLUS_Q\n"
-    "N_MAX_FEASIBLE=10000000\n",
-    encoding="utf-8",
-)
-PY
-
-python3 ./scripts/benchmark_csv.py \
-  summarize-granularity \
-  --input "${RESULT_DIR}/granularity.csv" \
-  --output "${RESULT_DIR}/granularity_summary.txt"
-
-./build/cluster_release/sequential_retriever \
-  --vectors $HOME/data/pdp_retrieve_enginescratch/cluster_bundle/${RUN_TAG}/memory_vectors_N10000000_D384.bin \
-  --queries $HOME/data/pdp_retrieve_enginescratch/cluster_bundle/${RUN_TAG}/query_vectors_Q400_D384.bin \
-  --topk 10 \
-  --output "${RESULT_DIR}/sequential_topk.csv" \
-  --run-metrics "${RESULT_DIR}/sequential_run_metrics.csv"
-
-./build/cluster_release/verify_results \
-  --sequential "${RESULT_DIR}/sequential_topk.csv" \
-  --parallel "${RESULT_DIR}/parallel_topk.csv" \
-  --epsilon 1e-5 \
-  --output "${RESULT_DIR}/correctness.csv"
-
-# The validated expedited rerun used N_SPEEDUP=2000000.
-for P in 2 4 8 10 12 14; do
-  HOSTFILE=".cache/cluster/speedup-p${P}.hosts"
-  if [ "${P}" -le 10 ]; then
-    cat > "${HOSTFILE}" <<EOF
-192.168.1.17 slots=${P} max-slots=${P}
-EOF
-  else
-    WORKER=$((P - 10))
-    cat > "${HOSTFILE}" <<EOF
-192.168.1.17 slots=10 max-slots=10
-192.168.1.199 slots=${WORKER} max-slots=${WORKER}
-EOF
-  fi
-
-  env HWLOC_COMPONENTS=-gl \
-    mpirun \
-    -x HWLOC_COMPONENTS \
-    --mca oob_tcp_disable_ipv6_family 1 \
-    --mca oob_tcp_if_include 192.168.1.0/24 \
-    --mca btl self,tcp \
-    --mca btl_tcp_if_include 192.168.1.0/24 \
-    --hostfile "${HOSTFILE}" \
-    --map-by slot \
-    -np "${P}" \
-    ./build/cluster_release/parallel_retriever \
-    --vectors .cache/cluster_runtime/${RUN_TAG}/datasets/synthetic/memory_vectors.bin \
-    --queries .cache/cluster_runtime/${RUN_TAG}/datasets/synthetic/query_vectors.bin \
-    --topk 10 \
-    --output "${PROBE_DIR}/speedup_parallel_topk_P${P}.csv" \
-    --metrics "${PROBE_DIR}/speedup_parallel_metrics_P${P}.csv" \
-    --run-metrics "${PROBE_DIR}/speedup_parallel_run_metrics_P${P}.csv"
-done
-
-python3 ./scripts/benchmark_csv.py \
-  build-speedup \
-  --baseline "${PROBE_DIR}/calibration_speedup_run_metrics_N2000000.csv" \
-  --output "${RESULT_DIR}/speedup.csv" \
-  "${PROBE_DIR}/speedup_parallel_run_metrics_P2.csv" \
-  "${PROBE_DIR}/speedup_parallel_run_metrics_P4.csv" \
-  "${PROBE_DIR}/speedup_parallel_run_metrics_P8.csv" \
-  "${PROBE_DIR}/speedup_parallel_run_metrics_P10.csv" \
-  "${PROBE_DIR}/speedup_parallel_run_metrics_P12.csv" \
-  "${PROBE_DIR}/speedup_parallel_run_metrics_P14.csv"
-
-bash ./scripts/run_cluster_postprocess.sh \
-  --results-dir "${RESULT_DIR}" \
-  --docs-output docs/analysis/latest-cluster-benchmark-review.md
-```
-
-### What success looks like
-
-- `correctness.csv` records only `PASS`
-- `analysis/final_conclusions.md` explicitly says:
-  - `FAISS comparison was skipped for this run`
-- `analysis/faiss_analysis.csv` still exists with its fixed header
-- `speedup.csv` uses:
-  - `N=2000000`
-  - `Q=400`
-  - `P in {1,2,4,8,10,12,14}`
-
-### Optional repo-local mirror after the bundle finishes
-
-If you want the final cluster outputs to also appear under the repo `results/` tree for easier review or git-side comparison, mirror them back explicitly after the external-storage run:
-
-```bash
-cd ~/work/Parallel-Retrieval-Engine-for-RAG
-RUN_TAG="$(date +%F)-two-nodes-full-bundle"
-mkdir -p results/cluster/"${RUN_TAG}"
-rsync -a \
-  $HOME/data/pdp_retrieve_engineresults/cluster/"${RUN_TAG}"/ \
-  results/cluster/"${RUN_TAG}"/
-```
-
-## 13. Regenerate Cluster Analysis And Figures Only
+## 8. Regenerate Cluster Analysis And Figures Only
 
 Use this when the raw cluster CSVs already exist but `analysis/`, `figures/`, or `docs/analysis/latest-cluster-benchmark-review.md` need to be rebuilt.
 
@@ -637,7 +489,7 @@ In the external-storage setup above, replace the `results/cluster/...` prefix wi
   - `analysis/final_conclusions.md` states that FAISS was skipped
   - `analysis/faiss_analysis.csv` may contain only the header row
 
-## 14. Output Layout After The Full Bundle
+## 9. Output Layout After The Full Bundle
 
 After a successful bundle run, the cluster result directory should look like this:
 
@@ -672,7 +524,7 @@ results/cluster/<run-tag>/
     `-- speedup_runtime.png
 ```
 
-## 15. Final Verification Checklist
+## 10. Final Verification Checklist
 
 Run these checks from `rag-header`:
 
@@ -716,32 +568,6 @@ What you want to see:
 - if FAISS was skipped for this run:
   - `analysis/final_conclusions.md` states that FAISS was skipped
   - `analysis/faiss_analysis.csv` still exists, even if it has header-only content
-
-## 16. Optional: Copy Results Back To The Repo Or To A Windows-Mounted Workspace
-
-You only need this if:
-
-- your real benchmark ran from external storage and you want a repo-local mirror under `results/cluster/`
-- or your editing workspace is a separate Windows checkout and you want a Windows-visible copy
-
-```bash
-RUN_TAG="$(date +%F)-two-nodes-full-bundle"
-mkdir -p ~/work/Parallel-Retrieval-Engine-for-RAG/results/cluster/"${RUN_TAG}"
-rsync -a \
-  $HOME/data/pdp_retrieve_engineresults/cluster/"${RUN_TAG}"/ \
-  ~/work/Parallel-Retrieval-Engine-for-RAG/results/cluster/"${RUN_TAG}"/
-```
-
-Optional Windows-mounted copy:
-
-```bash
-RUN_TAG="$(date +%F)-two-nodes-full-bundle"
-rsync -a \
-  $HOME/data/pdp_retrieve_engineresults/cluster/"${RUN_TAG}"/ \
-  /mnt/d/DS-AI/Parallel-Retrieval-Engine-for-RAG/results/cluster/"${RUN_TAG}"/
-```
-
-Adjust `/mnt/d/...` to match the Windows-mounted workspace path you actually use.
 
 ## Troubleshooting Shortlist
 
