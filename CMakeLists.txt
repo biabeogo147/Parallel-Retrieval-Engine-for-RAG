@@ -439,4 +439,32 @@ if(BUILD_TESTING)
             -P
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/RunBenchmarkAnalysisCalibrationAwareSmoke.cmake
     )
+    add_test(
+        NAME cluster_postprocess_smoke
+        COMMAND
+            ${CMAKE_COMMAND}
+            -DREPO_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/cluster_postprocess_smoke
+            -P
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/RunClusterPostprocessSmoke.cmake
+    )
+    add_test(
+        NAME cluster_postprocess_no_faiss_smoke
+        COMMAND
+            ${CMAKE_COMMAND}
+            -DREPO_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/cluster_postprocess_no_faiss_smoke
+            -P
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/RunClusterPostprocessNoFaissSmoke.cmake
+    )
+    add_test(
+        NAME cluster_bundle_dry_run_smoke
+        COMMAND
+            ${CMAKE_COMMAND}
+            -DREPO_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -DBUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}
+            -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/cluster_bundle_dry_run
+            -P
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/RunClusterBundleDryRunSmoke.cmake
+    )
 endif()

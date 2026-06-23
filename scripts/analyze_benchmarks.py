@@ -130,6 +130,20 @@ def require_file(path: Path) -> None:
         raise RuntimeError(f"missing required benchmark input: {path}")
 
 
+def detect_faiss_input_mode(paths: dict[str, Path]) -> str:
+    existing = {name: path.is_file() for name, path in paths.items()}
+    if all(existing.values()):
+        return "present"
+    if not any(existing.values()):
+        return "skipped"
+
+    missing = [name for name, is_present in existing.items() if not is_present]
+    raise RuntimeError(
+        "partial FAISS benchmark inputs detected; either provide all FAISS files or none: "
+        + ", ".join(missing)
+    )
+
+
 def read_run_metrics_table(path: Path) -> list[dict[str, float | int]]:
     rows = read_csv_rows(path, RUN_METRICS_FIELDS)
     parsed_rows: list[dict[str, float | int]] = []
@@ -577,9 +591,14 @@ def analyze_faiss(rows: list[dict[str, float | int | str]]) -> tuple[list[dict[s
 
         correctness_status = str(row["correctness_status"])
         if correctness_status == "PASS":
-            report_positioning = (
-                "Exact-match correctness holds against the sequential reference. Treat FAISS as an external optimized baseline, not as the project implementation target."
-            )
+            if int(row["parallel_workers"]) > int(row["faiss_threads"]):
+                report_positioning = (
+                    "Exact-match correctness holds against the sequential reference. Treat FAISS as an external optimized single-node exact-flat baseline on the head node while the project result is a distributed MPI run, not as the project implementation target."
+                )
+            else:
+                report_positioning = (
+                    "Exact-match correctness holds against the sequential reference. Treat FAISS as an external optimized baseline, not as the project implementation target."
+                )
         else:
             report_positioning = (
                 "Correctness does not hold against the sequential reference yet, so timing comparisons to FAISS are only provisional."
@@ -618,12 +637,22 @@ def analyze_faiss(rows: list[dict[str, float | int | str]]) -> tuple[list[dict[s
     return analysis_rows, summary
 
 
+def skipped_faiss_summary() -> dict[str, object]:
+    return {
+        "status": "SKIPPED",
+        "dataset_count": 0,
+        "worst_total_ratio_dataset": "SKIPPED",
+        "worst_total_ratio": 0.0,
+    }
+
+
 def build_final_conclusion(
     performance_conclusions_status: str,
     runtime_summary: dict[str, object],
     granularity_summary: dict[str, object],
     speedup_summary: dict[str, object],
     faiss_summary: dict[str, object],
+    faiss_enabled: bool,
 ) -> str:
     if performance_conclusions_status != "VALID":
         return (
@@ -633,6 +662,22 @@ def build_final_conclusion(
     runtime_status = str(runtime_summary["selected_target_status"])
     load_balance_status = str(granularity_summary["load_balance_status"])
     recommended_p = int(speedup_summary["recommended_operating_p"])
+    if not faiss_enabled:
+        if runtime_status == "UNDER_TARGET":
+            return (
+                f"The system is correct and scales to a practical operating point of P={recommended_p}, but the current workload still undershoots the intended 2-3 minute runtime target. "
+                f"Load-balance classification is {load_balance_status}. This run intentionally skipped the external FAISS comparison and focuses on the sequential-vs-parallel benchmark story."
+            )
+        if runtime_status == "OVER_TARGET":
+            return (
+                f"The system is correct and scales to a practical operating point of P={recommended_p}, but the selected workload is already above the intended runtime target. "
+                f"Load-balance classification is {load_balance_status}. This run intentionally skipped the external FAISS comparison and focuses on the sequential-vs-parallel benchmark story."
+            )
+        return (
+            f"The system is correct, the selected workload sits inside the intended benchmark window, and the recommended operating point is P={recommended_p}. "
+            f"Load-balance classification is {load_balance_status}. This run intentionally skipped the external FAISS comparison and focuses on the sequential-vs-parallel benchmark story."
+        )
+
     worst_faiss_ratio = float(faiss_summary["worst_total_ratio"])
     if runtime_status == "UNDER_TARGET":
         return (
@@ -650,13 +695,19 @@ def build_final_conclusion(
     )
 
 
-def prioritized_next_steps(calibration_mode: str) -> list[str]:
+def prioritized_next_steps(calibration_mode: str, faiss_enabled: bool) -> list[str]:
+    faiss_step = (
+        "Priority 4: Treat FAISS as a realism baseline; do not promise to outperform it with the current exact blocking MPI design."
+        if faiss_enabled
+        else "Priority 4: FAISS comparison was skipped for this run; if an external baseline is needed later, execute the FAISS workflow separately."
+    )
+
     if calibration_mode == "N_PLUS_Q":
         return [
             "Priority 1: Keep the current N ceiling explicit in the report; future runtime retuning should revisit memory capacity or sharding strategy before blindly increasing N again.",
             "Priority 2: Keep P_SELECTED near physical cores and stop treating 2X workers as a canonical operating point if a regression appears.",
             "Priority 3: Keep the report wording honest about load balance when idle-gap ratio is sensitive but absolute skew is tiny.",
-            "Priority 4: Treat FAISS as a realism baseline; do not promise to outperform it with the current exact blocking MPI design.",
+            faiss_step,
             "Priority 5: If a future performance phase is approved, focus on communication reduction and orchestration improvements before adding new corpora.",
         ]
 
@@ -664,7 +715,7 @@ def prioritized_next_steps(calibration_mode: str) -> list[str]:
         "Priority 1: Make the runtime benchmark hit the intended 120-180 second target by expanding BENCH_N_CANDIDATES, then revisiting Q only if needed.",
         "Priority 2: Keep P_SELECTED near physical cores and stop treating 2X workers as a canonical operating point if a regression appears.",
         "Priority 3: Keep the report wording honest about load balance when idle-gap ratio is sensitive but absolute skew is tiny.",
-        "Priority 4: Treat FAISS as a realism baseline; do not promise to outperform it with the current exact blocking MPI design.",
+        faiss_step,
         "Priority 5: If a future performance phase is approved, focus on communication reduction and orchestration improvements before adding new corpora.",
     ]
 
@@ -677,28 +728,70 @@ def render_markdown(
     granularity_summary: dict[str, object],
     speedup_summary: dict[str, object],
     faiss_rows: list[dict[str, object]],
+    faiss_enabled: bool,
     final_conclusion: str,
 ) -> str:
     sequential_correctness = correctness_summaries["sequential_vs_parallel"]
-    faiss_synthetic = correctness_summaries["faiss_synthetic"]
-    faiss_squad = correctness_summaries["faiss_squad"]
-
-    synthetic_faiss_row = next(row for row in faiss_rows if row["dataset_name"] == "synthetic")
-    squad_faiss_row = next(row for row in faiss_rows if row["dataset_name"] == "squad_minilm")
 
     next_steps_lines = "\n".join(
         f"{index}. {step}"
         for index, step in enumerate(
-            prioritized_next_steps(str(runtime_summary["calibration_mode"])),
+            prioritized_next_steps(str(runtime_summary["calibration_mode"]), faiss_enabled),
             start=1,
         )
     )
+
+    if faiss_enabled:
+        faiss_synthetic = correctness_summaries["faiss_synthetic"]
+        faiss_squad = correctness_summaries["faiss_squad"]
+        synthetic_faiss_row = next(row for row in faiss_rows if row["dataset_name"] == "synthetic")
+        squad_faiss_row = next(row for row in faiss_rows if row["dataset_name"] == "squad_minilm")
+        validity_evidence = (
+            f"sequential-vs-parallel correctness checked {sequential_correctness['query_count']} queries with all_pass={str(sequential_correctness['all_pass']).lower()}, "
+            f"FAISS synthetic all_pass={str(faiss_synthetic['all_pass']).lower()}, and FAISS squad all_pass={str(faiss_squad['all_pass']).lower()}."
+        )
+        correctness_evidence = (
+            f"sequential-vs-parallel max_score_diff was `{float(sequential_correctness['max_score_diff']):.8f}`. "
+            f"FAISS synthetic max_score_diff was `{float(faiss_synthetic['max_score_diff']):.8f}`. "
+            f"FAISS squad max_score_diff was `{float(faiss_squad['max_score_diff']):.8f}`."
+        )
+        correctness_statement = (
+            "The sequential baseline, MPI retriever, and maintained FAISS baselines all align under the current deterministic ordering and epsilon policy for this run."
+        )
+        faiss_section = f"""## 6. FAISS Comparison Findings
+
+Evidence: synthetic total_ratio was `{synthetic_faiss_row['total_ratio']}` with gap_class `{synthetic_faiss_row['gap_class']}`; squad_minilm total_ratio was `{squad_faiss_row['total_ratio']}` with gap_class `{squad_faiss_row['gap_class']}`.
+
+Report-ready statement: {synthetic_faiss_row['report_positioning']}
+
+Do not overclaim: FAISS is an optimized external CPU exact-flat baseline, so the project should frame this result as realism-oriented comparison rather than a requirement to outperform FAISS.
+"""
+    else:
+        validity_evidence = (
+            f"sequential-vs-parallel correctness checked {sequential_correctness['query_count']} queries with all_pass={str(sequential_correctness['all_pass']).lower()}. "
+            "FAISS comparison was skipped for this run."
+        )
+        correctness_evidence = (
+            f"sequential-vs-parallel max_score_diff was `{float(sequential_correctness['max_score_diff']):.8f}`. "
+            "No FAISS correctness CSVs were generated because FAISS comparison was skipped for this run."
+        )
+        correctness_statement = (
+            "The sequential baseline and MPI retriever align under the current deterministic ordering and epsilon policy for this run."
+        )
+        faiss_section = """## 6. FAISS Comparison Status
+
+Evidence: no `results/faiss/` comparison artifacts were provided for this run.
+
+Report-ready statement: FAISS comparison was skipped for this run, so the current review focuses on the in-repo sequential-vs-parallel benchmark story only.
+
+Do not overclaim: without the external baseline artifacts, this review cannot make any cross-system timing claim against FAISS.
+"""
 
     return f"""# {title}
 
 ## 1. Benchmark Validity Check
 
-Evidence: sequential-vs-parallel correctness checked {sequential_correctness['query_count']} queries with all_pass={str(sequential_correctness['all_pass']).lower()}, FAISS synthetic all_pass={str(faiss_synthetic['all_pass']).lower()}, and FAISS squad all_pass={str(faiss_squad['all_pass']).lower()}.
+Evidence: {validity_evidence}
 
 Report-ready statement: The benchmark validity status for this run is `{performance_conclusions_status}`.
 
@@ -714,9 +807,9 @@ Do not overclaim: selecting the closest available N is not the same as actually 
 
 ## 3. Correctness Findings
 
-Evidence: sequential-vs-parallel max_score_diff was `{float(sequential_correctness['max_score_diff']):.8f}`. FAISS synthetic max_score_diff was `{float(faiss_synthetic['max_score_diff']):.8f}`. FAISS squad max_score_diff was `{float(faiss_squad['max_score_diff']):.8f}`.
+Evidence: {correctness_evidence}
 
-Report-ready statement: The sequential baseline, MPI retriever, and maintained FAISS baselines all align under the current deterministic ordering and epsilon policy for this run.
+Report-ready statement: {correctness_statement}
 
 Do not overclaim: correctness here means exact agreement on the same vector inputs, not proof of semantic relevance against external text labels.
 
@@ -736,13 +829,7 @@ Report-ready statement: {speedup_summary['communication_breakdown_note']}
 
 Do not overclaim: the highest tested worker count is not automatically the best operating point once communication starts eroding total speedup.
 
-## 6. FAISS Comparison Findings
-
-Evidence: synthetic total_ratio was `{synthetic_faiss_row['total_ratio']}` with gap_class `{synthetic_faiss_row['gap_class']}`; squad_minilm total_ratio was `{squad_faiss_row['total_ratio']}` with gap_class `{squad_faiss_row['gap_class']}`.
-
-Report-ready statement: {synthetic_faiss_row['report_positioning']}
-
-Do not overclaim: FAISS is an optimized external CPU exact-flat baseline, so the project should frame this result as realism-oriented comparison rather than a requirement to outperform FAISS.
+{faiss_section}
 
 ## 7. Final Conclusion
 
@@ -787,6 +874,8 @@ def main() -> int:
         "granularity": results_dir / "granularity.csv",
         "speedup": results_dir / "speedup.csv",
         "selection_manifest": results_dir / "benchmark_selection.env",
+    }
+    optional_faiss_files = {
         "faiss_comparison": results_dir / "faiss" / "comparison.csv",
         "faiss_synthetic_correctness": results_dir / "faiss" / "synthetic_correctness.csv",
         "faiss_squad_correctness": results_dir / "faiss" / "squad_correctness.csv",
@@ -796,13 +885,15 @@ def main() -> int:
         for path in required_files.values():
             require_file(path)
 
+        faiss_mode = detect_faiss_input_mode(optional_faiss_files)
+        faiss_enabled = faiss_mode == "present"
         manifest = parse_manifest(required_files["selection_manifest"])
         selected_n = int(manifest["N_SELECTED"])
 
         runtime_rows = read_run_metrics_table(required_files["runtime_by_n"])
         granularity_rows = read_granularity_table(required_files["granularity"])
         speedup_rows = read_speedup_table(required_files["speedup"])
-        faiss_rows = read_faiss_comparison_table(required_files["faiss_comparison"])
+        faiss_rows = read_faiss_comparison_table(optional_faiss_files["faiss_comparison"]) if faiss_enabled else []
 
         granularity_analysis_rows, granularity_summary = analyze_granularity(granularity_rows)
         runtime_analysis_rows, runtime_summary = analyze_runtime(
@@ -813,13 +904,16 @@ def main() -> int:
             else None,
         )
         speedup_analysis_rows, speedup_summary = analyze_speedup(speedup_rows)
-        faiss_analysis_rows, faiss_summary = analyze_faiss(faiss_rows)
+        if faiss_enabled:
+            faiss_analysis_rows, faiss_summary = analyze_faiss(faiss_rows)
+        else:
+            faiss_analysis_rows = []
+            faiss_summary = skipped_faiss_summary()
 
-        correctness_summaries = {
-            "sequential_vs_parallel": read_correctness_summary(required_files["correctness"]),
-            "faiss_synthetic": read_correctness_summary(required_files["faiss_synthetic_correctness"]),
-            "faiss_squad": read_correctness_summary(required_files["faiss_squad_correctness"]),
-        }
+        correctness_summaries = {"sequential_vs_parallel": read_correctness_summary(required_files["correctness"])}
+        if faiss_enabled:
+            correctness_summaries["faiss_synthetic"] = read_correctness_summary(optional_faiss_files["faiss_synthetic_correctness"])
+            correctness_summaries["faiss_squad"] = read_correctness_summary(optional_faiss_files["faiss_squad_correctness"])
 
         all_correct = all(bool(summary["all_pass"]) for summary in correctness_summaries.values())
         performance_conclusions_status = "VALID" if all_correct else "INVALID_UNTIL_CORRECTNESS_FIXED"
@@ -830,12 +924,16 @@ def main() -> int:
             granularity_summary,
             speedup_summary,
             faiss_summary,
+            faiss_enabled,
         )
 
         benchmark_summary = {
             "analysis_version": 1,
             "performance_conclusions_status": performance_conclusions_status,
-            "inputs": {key: str(path) for key, path in required_files.items()},
+            "inputs": {
+                **{key: str(path) for key, path in required_files.items()},
+                **{key: str(path) for key, path in optional_faiss_files.items() if faiss_enabled},
+            },
             "selection_manifest": manifest,
             "runtime": runtime_summary,
             "correctness": correctness_summaries,
@@ -843,9 +941,11 @@ def main() -> int:
             "speedup": speedup_summary,
             "faiss": faiss_summary,
             "final_conclusion": final_conclusion,
-            "next_steps": prioritized_next_steps(str(runtime_summary["calibration_mode"])),
+            "next_steps": prioritized_next_steps(str(runtime_summary["calibration_mode"]), faiss_enabled),
             "project_framing": (
-                "The project is valuable as an exact distributed retrieval kernel and benchmarked parallel-computing exercise: it is correctness-gated, it exposes measurable scaling behavior, and it can now be compared honestly against an external FAISS baseline."
+                "The project is valuable as an exact distributed retrieval kernel and benchmarked parallel-computing exercise: it is correctness-gated and it exposes measurable scaling behavior."
+                if not faiss_enabled
+                else "The project is valuable as an exact distributed retrieval kernel and benchmarked parallel-computing exercise: it is correctness-gated, it exposes measurable scaling behavior, and it can now be compared honestly against an external FAISS baseline."
             ),
         }
 
@@ -866,6 +966,7 @@ def main() -> int:
             granularity_summary,
             speedup_summary,
             faiss_analysis_rows,
+            faiss_enabled,
             final_conclusion,
         )
         write_analysis_docs(output_dir, docs_output, markdown_body)

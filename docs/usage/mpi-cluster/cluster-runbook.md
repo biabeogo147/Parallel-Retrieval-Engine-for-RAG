@@ -4,6 +4,8 @@ This runbook is the repeatable day-to-day operating flow after the cluster has a
 
 All commands below run from the head node unless a section explicitly says otherwise.
 
+If you want the exact validated `rag-head + rag-worker1` process, including the dedicated full-bundle rerun and cluster postprocess flow, use [two-node-runbook-local-plus-199.md](two-node-runbook-local-plus-199.md) instead of adapting this generic guide.
+
 The examples assume:
 
 - canonical repo path: `~/work/Parallel-Retrieval-Engine-for-RAG`
@@ -282,12 +284,23 @@ rsync -av rag@rag-worker2:~/work/Parallel-Retrieval-Engine-for-RAG/results/ resu
 
 - Use the normal repo analysis or reporting flow on the archived head-node outputs.
 
-## What This Runbook Does Not Automate
+## What This Generic Runbook Does Not Automate
 
-The current repository does not yet provide cluster-aware automation for:
+The current repository does not yet provide generic multi-node automation for:
 
 - `bash ./scripts/run_all_experiments.sh`
 - `bash ./scripts/run_faiss_comparison.sh`
 - per-node remote build orchestration beyond the explicit SSH commands in this guide
 
-For now, keep physical multi-node execution manual and explicit. The single-machine benchmark scripts remain the canonical automation path.
+The one exception is the dedicated validated two-node wrapper flow documented in [two-node-runbook-local-plus-199.md](two-node-runbook-local-plus-199.md):
+
+- `bash ./scripts/run_cluster_two_node_bundle.sh --config .cache/cluster/two_node_bundle.env`
+- `bash ./scripts/run_cluster_postprocess.sh --results-dir results/cluster/<run-tag>`
+
+For large reruns on the current Windows + WSL head node, that dedicated two-node workflow now recommends:
+
+- `BENCH_STORAGE_ROOT=/mnt/e/data/pdp_retrieve_engine`
+
+so the heavy synthetic datasets, benchmark CSVs, `.venv`, and real-corpus caches do not keep expanding the WSL ext4 virtual disk on `C:`.
+
+That operator surface is intentionally case-specific. For broader `head + workers` cluster usage, keep the flow manual and explicit.

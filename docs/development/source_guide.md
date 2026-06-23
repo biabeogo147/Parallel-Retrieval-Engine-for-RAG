@@ -33,6 +33,7 @@ The codebase currently provides:
 - sequential-vs-parallel correctness comparison over canonical top-k CSV files
 - one-run benchmark summary metrics for both retriever binaries
 - WSL-first benchmark automation scripts for runtime selection, correctness, granularity, and speedup studies
+- dedicated physical-cluster bundle and postprocess wrappers for the validated two-node operator flow
 - Python benchmark helpers for CSV aggregation and headless figure generation
 - a Phase 8 FAISS exact-flat external baseline workflow over the same binary dataset contract
 - a real-corpus conversion path for `SQuAD + sentence-transformers/all-MiniLM-L6-v2`
@@ -77,19 +78,22 @@ If you want the fastest path to understanding, read the source in this order:
 31. `scripts/run_speedup.sh`
 32. `scripts/run_all_experiments.sh`
 33. `scripts/run_faiss_comparison.sh`
-34. `scripts/phase8_common.py`
-35. `scripts/faiss_compare.py`
-36. `scripts/prepare_squad_minilm.py`
-37. `scripts/benchmark_csv.py`
-38. `scripts/analyze_benchmarks.py`
-39. `scripts/plot_results.py`
-39. `tests/BenchmarkMetricsTest.cpp`
-40. `tests/CorrectnessCheckerTest.cpp`
-41. `tests/SequentialRetrieverTest.cpp`
-42. `tests/ParallelRetrieverTest.cpp`
-43. `tests/BinaryDatasetTest.cpp`
-44. `tests/ConfigLoggerTest.cpp`
-45. `tests/cmake/*.cmake`
+34. `scripts/cluster_common.sh`
+35. `scripts/run_cluster_two_node_bundle.sh`
+36. `scripts/run_cluster_postprocess.sh`
+37. `scripts/phase8_common.py`
+38. `scripts/faiss_compare.py`
+39. `scripts/prepare_squad_minilm.py`
+40. `scripts/benchmark_csv.py`
+41. `scripts/analyze_benchmarks.py`
+42. `scripts/plot_results.py`
+43. `tests/BenchmarkMetricsTest.cpp`
+44. `tests/CorrectnessCheckerTest.cpp`
+45. `tests/SequentialRetrieverTest.cpp`
+46. `tests/ParallelRetrieverTest.cpp`
+47. `tests/BinaryDatasetTest.cpp`
+48. `tests/ConfigLoggerTest.cpp`
+49. `tests/cmake/*.cmake`
 
 For a file-by-file reference, also read [source_file_reference.md](#source-file-reference).
 
@@ -629,6 +633,65 @@ It:
 
 This makes Phase 8 a maintained workflow rather than a one-off report script.
 
+### `cluster_common.sh`
+
+This script is the shared shell helper layer for the validated physical-cluster bundle flow.
+
+It:
+
+1. extends `benchmark_common.sh`
+2. validates the sourced bundle config
+3. detects the head-node physical-core count
+4. derives:
+   - `cluster_p_total`
+   - `cluster_faiss_threads`
+   - per-run result and scratch directories
+5. rejects real execution from `/mnt/...` head-node checkouts
+6. rewrites hostfiles for per-`P` speedup sweeps
+7. centralizes:
+   - worker sync helpers
+   - WSL-specific OpenMPI flags
+   - dry-run plan output
+
+### `run_cluster_two_node_bundle.sh`
+
+This script is the dedicated operator wrapper for the validated:
+
+- `rag-head`
+- `rag-worker1`
+
+physical-cluster case.
+
+It:
+
+1. sources `cluster_common.sh`
+2. loads a shell config file for the concrete two-node environment
+3. runs the maintained six-stage cluster flow:
+   - runtime calibration
+   - selected synthetic correctness run
+   - granularity summary
+   - speedup sweep
+   - FAISS comparisons
+   - postprocess
+4. writes the full artifact bundle under:
+   - `results/cluster/<run-tag>/`
+5. keeps the generic cluster guides manual by scoping automation to the validated two-node case only
+
+### `run_cluster_postprocess.sh`
+
+This script is the postprocess-only cluster wrapper.
+
+It:
+
+1. requires an existing cluster result directory with the canonical raw CSV set
+2. reuses:
+   - `plot_results.py`
+   - `analyze_benchmarks.py`
+3. regenerates:
+   - `results/cluster/<run-tag>/figures/`
+   - `results/cluster/<run-tag>/analysis/`
+   - `docs/analysis/latest-cluster-benchmark-review.md`
+
 ## How Data Moves Through the Current Pipeline
 
 The working pipeline is now:
@@ -643,7 +706,9 @@ The working pipeline is now:
 8. benchmark automation scripts and figure generation
 9. optional `prepare_squad_minilm.py` conversion for the Phase 8 real-corpus path
 10. `run_faiss_comparison.sh` for synthetic-plus-real FAISS baseline comparison
-11. `analyze_benchmarks.py` for derived analysis CSVs, JSON summaries, and report-ready Markdown conclusions
+11. optional `run_cluster_two_node_bundle.sh` for the validated physical-cluster full bundle
+12. optional `run_cluster_postprocess.sh` for cluster-only figure and analysis regeneration
+13. `analyze_benchmarks.py` for derived analysis CSVs, JSON summaries, and report-ready Markdown conclusions
 
 In more detail:
 
@@ -672,7 +737,13 @@ In more detail:
    - `results/faiss/*_run_metrics.csv`
    - `results/faiss/*_correctness.csv`
    - `results/faiss/comparison.csv`
-8. the analysis layer reads the final runtime, correctness, granularity, speedup, and FAISS outputs, then writes:
+8. the dedicated validated two-node bundle can run the same synthetic and FAISS flows against a physical cluster, then writes:
+   - `results/cluster/<run-tag>/*.csv`
+   - `results/cluster/<run-tag>/faiss/*.csv`
+   - `results/cluster/<run-tag>/analysis/*`
+   - `results/cluster/<run-tag>/figures/*`
+   - `docs/analysis/latest-cluster-benchmark-review.md`
+9. the analysis layer reads the final runtime, correctness, granularity, speedup, and FAISS outputs, then writes:
    - `results/analysis/*.csv`
    - `results/analysis/benchmark_summary.json`
    - `results/analysis/final_conclusions.md`
@@ -778,6 +849,8 @@ The `tests/cmake/*.cmake` scripts validate executable-level behavior:
 - `benchmark_csv.py build-faiss-comparison` writes the final Phase 8 comparison table
 - `run_faiss_comparison.sh` writes the expected FAISS synthetic and real-corpus artifacts on a reduced smoke profile
 - `analyze_benchmarks.py` writes derived analysis outputs, invalid-correctness gating, and the final report-ready Markdown review
+- `run_cluster_postprocess.sh` writes the expected cluster figures, derived analysis outputs, and cluster review doc on fixture input
+- `run_cluster_two_node_bundle.sh --dry-run` prints the expected six-stage plan and cluster result paths
 
 ## Source Boundaries to Remember After Phase 8
 
@@ -1109,6 +1182,24 @@ Use this file when you want to answer: "What exactly is this file responsible fo
 
 - orchestrates sequential, parallel, and FAISS comparison runs over both synthetic data and the current SQuAD + MiniLM real-corpus path
 
+## `scripts/cluster_common.sh`
+
+**Responsibility**
+
+- hosts shared shell helpers for the validated two-node cluster bundle and cluster postprocess flow
+
+## `scripts/run_cluster_two_node_bundle.sh`
+
+**Responsibility**
+
+- orchestrates the dedicated six-stage validated two-node cluster rerun flow
+
+## `scripts/run_cluster_postprocess.sh`
+
+**Responsibility**
+
+- regenerates cluster-scoped figures, derived analysis outputs, and the cluster review Markdown doc from an existing cluster result directory
+
 ## Test Files in `tests/`
 
 ## `tests/ConfigLoggerTest.cpp`
@@ -1279,6 +1370,18 @@ Use this file when you want to answer: "What exactly is this file responsible fo
 
 - validates that the analysis layer fails clearly when a required benchmark input CSV is missing
 
+## `tests/cmake/RunClusterPostprocessSmoke.cmake`
+
+**Responsibility**
+
+- validates end-to-end generation of cluster figures, derived analysis outputs, and the cluster docs-output review from a fixture cluster result directory
+
+## `tests/cmake/RunClusterBundleDryRunSmoke.cmake`
+
+**Responsibility**
+
+- validates the dedicated two-node cluster bundle dry-run plan and result-path reporting
+
 ## Build File
 
 ## `CMakeLists.txt`
@@ -1345,6 +1448,10 @@ Use this file when you want to answer: "What exactly is this file responsible fo
   - `scripts/phase8_common.py`
   - `scripts/faiss_compare.py`
   - `scripts/prepare_squad_minilm.py`
+- validated two-node physical-cluster automation:
+  - `scripts/cluster_common.sh`
+  - `scripts/run_cluster_two_node_bundle.sh`
+  - `scripts/run_cluster_postprocess.sh`
 - executable behavior checks:
   - `tests/ConfigLoggerTest.cpp`
   - `tests/BinaryDatasetTest.cpp`

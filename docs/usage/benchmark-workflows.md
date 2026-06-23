@@ -34,6 +34,7 @@ These are the current public script knobs exposed by `scripts/benchmark_common.s
 | Variable | Meaning | Current default |
 | --- | --- | --- |
 | `BENCH_BUILD_DIR` | build tree used by the benchmark scripts | `$repo_root/build/debug` |
+| `BENCH_STORAGE_ROOT` | optional external root for heavy benchmark artifacts such as scratch datasets, benchmark results, plotting `.venv`, and real-corpus caches | unset |
 | `BENCH_RESULTS_DIR` | final benchmark output directory | `$repo_root/results` |
 | `BENCH_SCRATCH_DIR` | scratch datasets and intermediate CSVs | `$repo_root/.cache/benchmarks` |
 | `BENCH_D` | vector dimension | `384` |
@@ -53,6 +54,13 @@ These are the current public script knobs exposed by `scripts/benchmark_common.s
 | `BENCH_SQUAD_OUTPUT_DIR` | converted real-corpus output directory for Phase 8 | `$repo_root/.cache/real_corpora/squad_minilm` |
 | `BENCH_SQUAD_MODEL` | embedding model used by `prepare_squad_minilm.py` | `sentence-transformers/all-MiniLM-L6-v2` |
 | `BENCH_SQUAD_QUERIES_LIMIT` | number of validation questions kept for the current real-corpus run | `100` |
+
+If `BENCH_STORAGE_ROOT` is set and you do not also override the more specific paths above, the benchmark layer derives these defaults automatically:
+
+- `BENCH_RESULTS_DIR="$BENCH_STORAGE_ROOT/results"`
+- `BENCH_SCRATCH_DIR="$BENCH_STORAGE_ROOT/scratch"`
+- `BENCH_PLOT_VENV_DIR="$BENCH_STORAGE_ROOT/.venv"`
+- `BENCH_SQUAD_OUTPUT_DIR="$BENCH_STORAGE_ROOT/real_corpora/squad_minilm"`
 
 ## `benchmark_selection.env`
 
@@ -97,34 +105,42 @@ For a detailed explanation of the CSV files produced by these stages, including 
 **Bash**
 
 ```bash
+BENCH_STORAGE_ROOT=/mnt/e/data/pdp_retrieve_engine \
 bash ./scripts/run_all_experiments.sh
 ```
 
 **Expected artifacts**
 
-- `results/runtime_by_N.csv`
-- `results/benchmark_selection.env`
-- `results/sequential_topk.csv`
-- `results/parallel_topk.csv`
-- `results/correctness.csv`
-- `results/granularity.csv`
-- `results/granularity_summary.txt`
-- `results/speedup.csv`
-- `results/figures/runtime_by_N.png`
-- `results/figures/granularity.png`
-- `results/figures/speedup_runtime.png`
-- `results/figures/speedup_curves.png`
+- `/mnt/e/data/pdp_retrieve_engine/results/runtime_by_N.csv`
+- `/mnt/e/data/pdp_retrieve_engine/results/benchmark_selection.env`
+- `/mnt/e/data/pdp_retrieve_engine/results/sequential_topk.csv`
+- `/mnt/e/data/pdp_retrieve_engine/results/parallel_topk.csv`
+- `/mnt/e/data/pdp_retrieve_engine/results/correctness.csv`
+- `/mnt/e/data/pdp_retrieve_engine/results/granularity.csv`
+- `/mnt/e/data/pdp_retrieve_engine/results/granularity_summary.txt`
+- `/mnt/e/data/pdp_retrieve_engine/results/speedup.csv`
+- `/mnt/e/data/pdp_retrieve_engine/results/figures/runtime_by_N.png`
+- `/mnt/e/data/pdp_retrieve_engine/results/figures/granularity.png`
+- `/mnt/e/data/pdp_retrieve_engine/results/figures/speedup_runtime.png`
+- `/mnt/e/data/pdp_retrieve_engine/results/figures/speedup_curves.png`
 
 **What success looks like**
 
 - The script prints `Benchmark automation completed.`
-- The final CSV and PNG files appear under `results/`.
+- The final CSV and PNG files appear under the selected benchmark results root.
 
 **Next step**
 
 - Inspect the generated CSVs with [results-csv-reference.md](results-csv-reference.md), or re-run with a reduced custom profile.
 - If you also need the Phase 8 external baseline, run `bash ./scripts/run_faiss_comparison.sh` afterward.
 - After the raw benchmark and FAISS outputs exist, run the analysis layer described in section 10.
+
+If you used an external storage root and want a repo-local snapshot afterward, copy the final folder back explicitly, for example:
+
+```bash
+mkdir -p results/final-rerun
+rsync -a /mnt/e/data/pdp_retrieve_engine/results/ results/final-rerun/
+```
 
 ## 2. Stage: Runtime Calibration
 
@@ -455,6 +471,7 @@ python3 ./scripts/analyze_benchmarks.py \
 - `run_all_experiments.sh` is the only script that bootstraps the plotting virtual environment and generates figures.
 - The stage scripts reuse or generate synthetic datasets under the benchmark scratch directory automatically.
 - If `benchmark_selection.env` is missing or still follows the older reduced schema, the stage scripts regenerate it through `run_calibrate_target.sh` automatically.
+- `BENCH_STORAGE_ROOT=/mnt/e/data/pdp_retrieve_engine` is the recommended large-run setting on the current Windows + WSL machine because it keeps big synthetic datasets, benchmark CSVs, `.venv`, and real-corpus caches off the WSL ext4 virtual disk on `C:`.
 - If you change `BENCH_RESULTS_DIR` or `BENCH_SCRATCH_DIR`, remember to inspect or clean those custom paths later instead of the defaults.
 - `run_all_experiments.sh` remains synthetic-only by design.
 - `run_faiss_comparison.sh` reuses the same `.venv/` directory for FAISS and real-corpus conversion dependencies.

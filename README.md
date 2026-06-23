@@ -66,6 +66,7 @@ For copy-paste operational docs after `git clone`, start with:
 For physical three-machine MPI cluster setup after local onboarding, continue with:
 
 - `docs/usage/mpi-cluster/README.md`
+- `docs/usage/mpi-cluster/two-node-runbook-local-plus-199.md` if you want the exact validated local-WSL-head plus one-Ubuntu-worker flow
 
 ## Quickstart in WSL
 
@@ -118,9 +119,15 @@ Implemented now:
 - Phase 8 Python helpers for binary dataset reuse, FAISS exact-flat search, and SQuAD + MiniLM conversion
 - `run_faiss_comparison.sh` orchestration for sequential, parallel, and FAISS comparison artifacts under `results/faiss/`
 - `analyze_benchmarks.py` for deterministic post-run analysis under `results/analysis/` plus `docs/analysis/latest-benchmark-review.md`
+- dedicated physical-cluster wrappers for the validated two-node `rag-head + rag-worker1` flow:
+  - `run_cluster_two_node_bundle.sh`
+  - `run_cluster_postprocess.sh`
+  - `docs/analysis/latest-cluster-benchmark-review.md`
+  - optional external-storage root such as `/mnt/e/data/pdp_retrieve_engine` for large cluster reruns on Windows + WSL
 - `CTest` coverage for parser behavior, dataset IO, deterministic generator smoke checks, sequential retrieval checks, blocking MPI smoke checks, correctness-check workflow checks, and benchmark automation smoke runs
 - `CTest` smoke coverage for FAISS comparison-table generation and reduced-profile FAISS workflow orchestration
 - `CTest` smoke coverage for benchmark-analysis generation, invalid-correctness gating, and missing-input failures
+- `CTest` smoke coverage for cluster bundle dry-run planning and cluster postprocess artifact generation
 - WSL helper scripts and onboarding docs
 
 Still deferred to later phases:
@@ -138,6 +145,7 @@ Still deferred to later phases:
 - `docs/usage/benchmark-workflows.md`
 - `docs/usage/troubleshooting.md`
 - `docs/usage/mpi-cluster/README.md`
+- `docs/usage/mpi-cluster/two-node-runbook-local-plus-199.md`
 - `docs/usage/mpi-cluster/node-bootstrap-wsl.md`
 - `docs/usage/mpi-cluster/node-bootstrap-ubuntu.md`
 - `docs/usage/mpi-cluster/node-bootstrap-macos-multipass.md`
@@ -147,6 +155,7 @@ Still deferred to later phases:
 - `docs/analysis/README.md`
 - `docs/analysis/report_mapping.md`
 - `docs/analysis/latest-benchmark-review.md`
+- `docs/analysis/latest-cluster-benchmark-review.md`
 - `docs/development/project_specification.md`
 - `docs/development/data_pipeline_and_benchmarks.md`
 - `docs/development/developer_guide.md`
@@ -165,3 +174,4 @@ Still deferred to later phases:
 - `docs/plans/2026-06-16-benchmark-analysis-layer.md`
 - `docs/plans/2026-06-15-usage-onboarding-docs.md`
 - `docs/plans/2026-06-17-mpi-cluster-setup-docs.md`
+- `docs/plans/2026-06-23-cluster-benchmark-full-bundle.md`

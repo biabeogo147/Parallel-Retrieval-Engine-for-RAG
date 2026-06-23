@@ -1,6 +1,6 @@
 # Cluster Assembly And Validation
 
-This guide starts after all three physical machines have already finished one of the node bootstrap guides.
+This guide starts after all physical machines have already finished one of the node bootstrap guides.
 
 All commands below run from the head node unless a section explicitly says otherwise.
 

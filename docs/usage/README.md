@@ -29,6 +29,7 @@ Use `docs/development/` for:
 If you need a physical three-machine MPI cluster instead of the normal single-machine path, branch into:
 
 - [mpi-cluster/README.md](mpi-cluster/README.md)
+- [mpi-cluster/two-node-runbook-local-plus-199.md](mpi-cluster/two-node-runbook-local-plus-199.md) if you want the exact validated local-WSL-head plus one-Ubuntu-worker flow, including the dedicated full-bundle rerun and cluster postprocess steps
 
 If you only need the shortest path after cloning, start with `getting-started-wsl.md`, then jump directly to the specific workflow you need.
 
@@ -96,6 +97,16 @@ Use [mpi-cluster/README.md](mpi-cluster/README.md) when:
 - you are preparing three physical computers instead of one local development machine
 - you need one shared cluster workflow after separate per-node bootstrap steps
 - you want to run `parallel_retriever` across multiple LAN-reachable Ubuntu environments
+
+Use [mpi-cluster/two-node-runbook-local-plus-199.md](mpi-cluster/two-node-runbook-local-plus-199.md) when:
+
+- you specifically want the exact `rag-head + rag-worker1` process that was already executed and verified on this repo
+- you prefer one end-to-end checklist over adapting the generic cluster guides
+- you want the dedicated operator wrapper flow around:
+  - `scripts/run_cluster_two_node_bundle.sh`
+  - `scripts/run_cluster_postprocess.sh`
+  - `results/cluster/<run-tag>/analysis/`
+  - `results/cluster/<run-tag>/figures/`
 
 That bundle keeps the current repo boundaries intact:
 

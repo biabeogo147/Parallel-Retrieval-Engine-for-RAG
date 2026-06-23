@@ -460,6 +460,7 @@ Default benchmark knobs are controlled by environment variables:
 - `BENCH_P_SELECTED`
 - `BENCH_P_LIST`
 - `BENCH_BUILD_DIR`
+- `BENCH_STORAGE_ROOT`
 - `BENCH_RESULTS_DIR`
 - `BENCH_SCRATCH_DIR`
 - `BENCH_FAISS_RESULTS_DIR`
@@ -472,6 +473,13 @@ The repo-local `.venv/` is now reused for both:
 
 - Phase 7 plotting dependencies such as `matplotlib`
 - Phase 8 Python dependencies such as `faiss-cpu`, `pyarrow`, and `sentence-transformers`
+
+If `BENCH_STORAGE_ROOT` is set, the benchmark layer derives these heavier paths from it unless they are overridden explicitly:
+
+- `BENCH_RESULTS_DIR="$BENCH_STORAGE_ROOT/results"`
+- `BENCH_SCRATCH_DIR="$BENCH_STORAGE_ROOT/scratch"`
+- `BENCH_PLOT_VENV_DIR="$BENCH_STORAGE_ROOT/.venv"`
+- `BENCH_SQUAD_OUTPUT_DIR="$BENCH_STORAGE_ROOT/real_corpora/squad_minilm"`
 
 Use the repository-local `data/` directory for synthetic outputs produced by development and smoke checks. Reserve `/mnt/e/data` for larger external benchmark corpora and converted real datasets added in later phases.
 
@@ -544,6 +552,58 @@ The Phase 8 artifact set is:
 The real-corpus conversion cache is stored under:
 
 - `.cache/real_corpora/squad_minilm/`
+
+## Dedicated Two-Node Cluster Bundle Flow
+
+The repository now also provides one dedicated physical-cluster operator wrapper for the validated:
+
+- `rag-head`
+- `rag-worker1`
+
+topology documented in `../usage/mpi-cluster/two-node-runbook-local-plus-199.md`.
+
+Use it only from a WSL-native head-node checkout such as:
+
+- `~/work/Parallel-Retrieval-Engine-for-RAG`
+
+Do not launch the real cluster bundle from a Windows-mounted repo path such as:
+
+- `/mnt/d/DS-AI/Parallel-Retrieval-Engine-for-RAG`
+
+because the cluster wrapper intentionally rejects `/mnt/...` head-node checkouts for real execution.
+
+The dedicated operator surface is:
+
+- `scripts/cluster_common.sh`
+  - shared two-node cluster helpers, hostfile rewriting, worker sync helpers, WSL-specific OpenMPI launch controls, and repo-local runtime staging for external benchmark-storage roots
+- `scripts/run_cluster_two_node_bundle.sh`
+  - the maintained `6`-stage operator flow for:
+    - cluster runtime calibration
+    - selected synthetic correctness run
+    - granularity summary
+    - speedup sweep
+    - FAISS comparisons
+    - cluster postprocess
+- `scripts/run_cluster_postprocess.sh`
+  - figure and analysis regeneration for an existing `results/cluster/<run-tag>/` directory
+
+Typical entrypoint:
+
+```bash
+cp docs/usage/mpi-cluster/examples/two_node_bundle.env.example .cache/cluster/two_node_bundle.env
+nano .cache/cluster/two_node_bundle.env
+bash ./scripts/run_cluster_two_node_bundle.sh \
+  --config .cache/cluster/two_node_bundle.env \
+  --run-tag "$(date +%F)-local-plus-199-full-bundle"
+```
+
+On the current Windows + WSL machine, the maintained two-node workflow now prefers:
+
+- `BENCH_STORAGE_ROOT=/mnt/e/data/pdp_retrieve_engine`
+
+so the large cluster bundle writes scratch datasets, benchmark CSVs, the plotting `.venv`, and the SQuAD conversion cache outside the WSL ext4 virtual disk on `C:`. The wrapper still keeps lightweight repo-local runtime paths under `.cache/cluster_runtime/` so head-node symlinks and worker-side file copies resolve under the same repo-relative MPI paths.
+
+This is intentionally a case-specific operator wrapper. The generic `head + workers` cluster guidance remains manual and lives under `../usage/mpi-cluster/`.
 
 ## Benchmark Analysis Flow
 
@@ -640,6 +700,8 @@ Small executable or script-based checks used by `CTest`.
 - `BenchmarkMetricsTest.cpp`: run-summary metrics aggregation and speedup-row validation
 - `CorrectnessCheckerTest.cpp`: correctness comparison validation and failure cases
 - `tests/cmake/*.cmake`: CLI smoke, determinism, sequential checks, blocking MPI end-to-end checks, correctness-check workflow checks, and benchmark automation smoke checks
+- `tests/cmake/RunClusterPostprocessSmoke.cmake`: cluster postprocess artifact-generation smoke check
+- `tests/cmake/RunClusterBundleDryRunSmoke.cmake`: cluster bundle dry-run plan smoke check
 
 Later phases may still add broader real-text corpus checks, alternate-baseline checks, metadata-backed demo checks, and report-oriented validation here.
 
@@ -659,6 +721,10 @@ POSIX shell helpers intended to run inside Ubuntu WSL.
 - `run_speedup.sh`: speedup benchmark stage
 - `run_all_experiments.sh`: one-command synthetic benchmark orchestration
 - `run_faiss_comparison.sh`: Phase 8 orchestration for sequential / parallel / FAISS comparison
+- `cluster_common.sh`: shared helpers for the validated two-node cluster bundle and cluster postprocess flow
+- `run_cluster_two_node_bundle.sh`: dedicated full-bundle rerun wrapper for the validated `rag-head + rag-worker1` topology
+- `run_cluster_postprocess.sh`: cluster-only figure and analysis regeneration wrapper
+  - supports both a full cluster result directory with FAISS artifacts and a no-FAISS cluster result directory where the report should mark FAISS as skipped
 - `benchmark_csv.py`: run-summary aggregation and manifest helpers
 - `analyze_benchmarks.py`: post-run benchmark interpretation, derived analysis tables, and report-ready summary generation
 - `phase8_common.py`: shared binary-format and CSV helpers for the Phase 8 Python scripts
@@ -751,4 +817,3 @@ The current build introduces these targets:
 2. New docs must use the refactored `docs/development`, `docs/usage`, and `docs/plans` paths.
 3. WSL-first commands should be the default in docs and scripts.
 4. Tool-only helpers should stay under `tools/` unless they become shared runtime code needed by retrievers and tests.
-

@@ -60,9 +60,22 @@ init_benchmark_env() {
     require_command python3
     require_command mpirun
 
+    bench_storage_root=${BENCH_STORAGE_ROOT:-}
+    if [ -n "$bench_storage_root" ]; then
+        default_results_dir="${bench_storage_root}/results"
+        default_scratch_dir="${bench_storage_root}/scratch"
+        default_plot_venv_dir="${bench_storage_root}/.venv"
+        default_squad_output_dir="${bench_storage_root}/real_corpora/squad_minilm"
+    else
+        default_results_dir="$repo_root/results"
+        default_scratch_dir="$repo_root/.cache/benchmarks"
+        default_plot_venv_dir="$repo_root/.venv"
+        default_squad_output_dir="$repo_root/.cache/real_corpora/squad_minilm"
+    fi
+
     bench_build_dir=${BENCH_BUILD_DIR:-"$repo_root/build/debug"}
-    bench_results_dir=${BENCH_RESULTS_DIR:-"$repo_root/results"}
-    bench_scratch_dir=${BENCH_SCRATCH_DIR:-"$repo_root/.cache/benchmarks"}
+    bench_results_dir=${BENCH_RESULTS_DIR:-"$default_results_dir"}
+    bench_scratch_dir=${BENCH_SCRATCH_DIR:-"$default_scratch_dir"}
     bench_figures_dir="${bench_results_dir}/figures"
     bench_faiss_results_dir=${BENCH_FAISS_RESULTS_DIR:-"${bench_results_dir}/faiss"}
     bench_d=${BENCH_D:-384}
@@ -76,13 +89,14 @@ init_benchmark_env() {
     bench_p_selected=${BENCH_P_SELECTED:-$(detect_physical_cores)}
     bench_p_list=${BENCH_P_LIST:-$(generate_default_p_list "$bench_p_selected")}
     selection_env_path="${bench_results_dir}/benchmark_selection.env"
-    bench_plot_venv_dir=${BENCH_PLOT_VENV_DIR:-"$repo_root/.venv"}
+    bench_plot_venv_dir=${BENCH_PLOT_VENV_DIR:-"$default_plot_venv_dir"}
     bench_python_stdlib=${BENCH_PYTHON_STDLIB:-python3}
     bench_squad_input_dir=${BENCH_SQUAD_INPUT_DIR:-/mnt/e/data/squad/plain_text}
-    bench_squad_output_dir=${BENCH_SQUAD_OUTPUT_DIR:-"$repo_root/.cache/real_corpora/squad_minilm"}
+    bench_squad_output_dir=${BENCH_SQUAD_OUTPUT_DIR:-"$default_squad_output_dir"}
     bench_squad_model=${BENCH_SQUAD_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
     bench_squad_queries_limit=${BENCH_SQUAD_QUERIES_LIMIT:-100}
 
+    export bench_storage_root
     export bench_build_dir
     export bench_results_dir
     export bench_scratch_dir
