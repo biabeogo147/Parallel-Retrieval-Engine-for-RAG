@@ -407,7 +407,7 @@ All commands in this section run from the WSL-native `rag-header` checkout.
 cd ~/work/Parallel-Retrieval-Engine-for-RAG
 RUN_TAG="$(date +%F)-two-nodes-full-bundle"
 
-mkdir -p /mnt/e/data/pdp_retrieve_engine
+mkdir -p mkdir -p "$HOME/data/pdp_retrieve_engine"
 
 bash ./scripts/run_cluster_two_node_bundle.sh \
   --config .cache/cluster/two_node_bundle.env \
@@ -416,16 +416,16 @@ bash ./scripts/run_cluster_two_node_bundle.sh \
 
 ### Expected artifacts
 
-- `/mnt/e/data/pdp_retrieve_engine/results/cluster/${RUN_TAG}/runtime_by_N.csv`
-- `/mnt/e/data/pdp_retrieve_engine/results/cluster/${RUN_TAG}/benchmark_selection.env`
-- `/mnt/e/data/pdp_retrieve_engine/results/cluster/${RUN_TAG}/sequential_topk.csv`
-- `/mnt/e/data/pdp_retrieve_engine/results/cluster/${RUN_TAG}/parallel_topk.csv`
-- `/mnt/e/data/pdp_retrieve_engine/results/cluster/${RUN_TAG}/correctness.csv`
-- `/mnt/e/data/pdp_retrieve_engine/results/cluster/${RUN_TAG}/granularity.csv`
-- `/mnt/e/data/pdp_retrieve_engine/results/cluster/${RUN_TAG}/speedup.csv`
-- `/mnt/e/data/pdp_retrieve_engine/results/cluster/${RUN_TAG}/faiss/`
-- `/mnt/e/data/pdp_retrieve_engine/results/cluster/${RUN_TAG}/analysis/`
-- `/mnt/e/data/pdp_retrieve_engine/results/cluster/${RUN_TAG}/figures/`
+- `$HOME/data/pdp_retrieve_engineresults/cluster/${RUN_TAG}/runtime_by_N.csv`
+- `$HOME/data/pdp_retrieve_engineresults/cluster/${RUN_TAG}/benchmark_selection.env`
+- `$HOME/data/pdp_retrieve_engineresults/cluster/${RUN_TAG}/sequential_topk.csv`
+- `$HOME/data/pdp_retrieve_engineresults/cluster/${RUN_TAG}/parallel_topk.csv`
+- `$HOME/data/pdp_retrieve_engineresults/cluster/${RUN_TAG}/correctness.csv`
+- `$HOME/data/pdp_retrieve_engineresults/cluster/${RUN_TAG}/granularity.csv`
+- `$HOME/data/pdp_retrieve_engineresults/cluster/${RUN_TAG}/speedup.csv`
+- `$HOME/data/pdp_retrieve_engineresults/cluster/${RUN_TAG}/faiss/`
+- `$HOME/data/pdp_retrieve_engineresults/cluster/${RUN_TAG}/analysis/`
+- `$HOME/data/pdp_retrieve_engineresults/cluster/${RUN_TAG}/figures/`
 - `docs/analysis/latest-cluster-benchmark-review.md`
 
 ### What success looks like
@@ -438,7 +438,7 @@ bash ./scripts/run_cluster_two_node_bundle.sh \
   - FAISS comparisons
   - postprocess
 - the script finishes with:
-  - `Cluster bundle completed at /mnt/e/data/pdp_retrieve_engine/results/cluster/<run-tag>`
+  - `Cluster bundle completed at $HOME/data/pdp_retrieve_engineresults/cluster/<run-tag>`
 - both:
   - `correctness.csv`
   - `faiss/synthetic_correctness.csv`
@@ -473,8 +473,8 @@ Use this recovery path when:
 ```bash
 cd ~/work/Parallel-Retrieval-Engine-for-RAG
 RUN_TAG=2026-06-23-two-nodes-e-root-final
-RESULT_DIR=/mnt/e/data/pdp_retrieve_engine/results/cluster/${RUN_TAG}
-PROBE_DIR=/mnt/e/data/pdp_retrieve_engine/scratch/cluster_bundle/${RUN_TAG}/probes
+RESULT_DIR=$HOME/data/pdp_retrieve_engineresults/cluster/${RUN_TAG}
+PROBE_DIR=$HOME/data/pdp_retrieve_enginescratch/cluster_bundle/${RUN_TAG}/probes
 
 mkdir -p "${RESULT_DIR}"
 
@@ -486,7 +486,7 @@ cp "${RESULT_DIR}/parallel_metrics.csv" "${RESULT_DIR}/granularity.csv"
 
 python3 - <<'PY'
 from pathlib import Path
-result_dir = Path("/mnt/e/data/pdp_retrieve_engine/results/cluster/2026-06-23-two-nodes-e-root-final")
+result_dir = Path("$HOME/data/pdp_retrieve_engineresults/cluster/2026-06-23-two-nodes-e-root-final")
 result_dir.joinpath("benchmark_selection.env").write_text(
     "N_SELECTED=10000000\n"
     "N_SPEEDUP=2000000\n"
@@ -507,8 +507,8 @@ python3 ./scripts/benchmark_csv.py \
   --output "${RESULT_DIR}/granularity_summary.txt"
 
 ./build/cluster_release/sequential_retriever \
-  --vectors /mnt/e/data/pdp_retrieve_engine/scratch/cluster_bundle/${RUN_TAG}/memory_vectors_N10000000_D384.bin \
-  --queries /mnt/e/data/pdp_retrieve_engine/scratch/cluster_bundle/${RUN_TAG}/query_vectors_Q400_D384.bin \
+  --vectors $HOME/data/pdp_retrieve_enginescratch/cluster_bundle/${RUN_TAG}/memory_vectors_N10000000_D384.bin \
+  --queries $HOME/data/pdp_retrieve_enginescratch/cluster_bundle/${RUN_TAG}/query_vectors_Q400_D384.bin \
   --topk 10 \
   --output "${RESULT_DIR}/sequential_topk.csv" \
   --run-metrics "${RESULT_DIR}/sequential_run_metrics.csv"
@@ -589,7 +589,7 @@ cd ~/work/Parallel-Retrieval-Engine-for-RAG
 RUN_TAG="$(date +%F)-two-nodes-full-bundle"
 mkdir -p results/cluster/"${RUN_TAG}"
 rsync -a \
-  /mnt/e/data/pdp_retrieve_engine/results/cluster/"${RUN_TAG}"/ \
+  $HOME/data/pdp_retrieve_engineresults/cluster/"${RUN_TAG}"/ \
   results/cluster/"${RUN_TAG}"/
 ```
 
@@ -602,7 +602,7 @@ Use this when the raw cluster CSVs already exist but `analysis/`, `figures/`, or
 ```bash
 cd ~/work/Parallel-Retrieval-Engine-for-RAG
 RUN_TAG="$(date +%F)-two-nodes-full-bundle"
-RESULT_DIR="/mnt/e/data/pdp_retrieve_engine/results/cluster/${RUN_TAG}"
+RESULT_DIR="$HOME/data/pdp_retrieve_engineresults/cluster/${RUN_TAG}"
 
 bash ./scripts/run_cluster_postprocess.sh \
   --results-dir "${RESULT_DIR}" \
@@ -625,7 +625,7 @@ bash ./scripts/run_cluster_postprocess.sh \
 
 In the external-storage setup above, replace the `results/cluster/...` prefix with:
 
-- `/mnt/e/data/pdp_retrieve_engine/results/cluster/...`
+- `$HOME/data/pdp_retrieve_engineresults/cluster/...`
 
 ### What success looks like
 
@@ -680,7 +680,7 @@ Run these checks from `rag-header`:
 cd ~/work/Parallel-Retrieval-Engine-for-RAG
 
 RUN_TAG="$(date +%F)-two-nodes-full-bundle"
-RESULT_DIR="/mnt/e/data/pdp_retrieve_engine/results/cluster/${RUN_TAG}"
+RESULT_DIR="$HOME/data/pdp_retrieve_engineresults/cluster/${RUN_TAG}"
 
 test -f "${RESULT_DIR}/runtime_by_N.csv"
 test -f "${RESULT_DIR}/benchmark_selection.env"
@@ -728,7 +728,7 @@ You only need this if:
 RUN_TAG="$(date +%F)-two-nodes-full-bundle"
 mkdir -p ~/work/Parallel-Retrieval-Engine-for-RAG/results/cluster/"${RUN_TAG}"
 rsync -a \
-  /mnt/e/data/pdp_retrieve_engine/results/cluster/"${RUN_TAG}"/ \
+  $HOME/data/pdp_retrieve_engineresults/cluster/"${RUN_TAG}"/ \
   ~/work/Parallel-Retrieval-Engine-for-RAG/results/cluster/"${RUN_TAG}"/
 ```
 
@@ -737,7 +737,7 @@ Optional Windows-mounted copy:
 ```bash
 RUN_TAG="$(date +%F)-two-nodes-full-bundle"
 rsync -a \
-  /mnt/e/data/pdp_retrieve_engine/results/cluster/"${RUN_TAG}"/ \
+  $HOME/data/pdp_retrieve_engineresults/cluster/"${RUN_TAG}"/ \
   /mnt/d/DS-AI/Parallel-Retrieval-Engine-for-RAG/results/cluster/"${RUN_TAG}"/
 ```
 
