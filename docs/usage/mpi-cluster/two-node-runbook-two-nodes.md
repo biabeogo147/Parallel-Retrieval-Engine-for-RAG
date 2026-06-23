@@ -1,19 +1,19 @@
-# Validated Two-Node Runbook: `rag-head` + `rag-worker1`
+# Validated Two-Node Runbook: `rag-header` + `rag-worker1`
 
 This document records the exact two-node workflow that was validated in this repository with:
 
-- local machine as the head node
-- Ubuntu 24.04 under WSL2 on the head node
+- local machine as the header node
+- Ubuntu 24.04 under WSL2 on the header node
 - one Ubuntu server worker at `192.168.1.199`
 - Linux user `rag` on both nodes
 
-Unlike the generic cluster guides, this file is intentionally concrete and end-to-end. Follow it when you want one complete checklist instead of adapting the broader `head + 2 workers` documentation.
+Unlike the generic cluster guides, this file is intentionally concrete and end-to-end. Follow it when you want one complete checklist instead of adapting the broader `header + 2 workers` documentation.
 
 ## Scope
 
 This runbook covers:
 
-- preparing the Windows host and local WSL head node
+- preparing the Windows host and local WSL header node
 - preparing the Ubuntu server worker
 - creating and using the Linux user `rag`
 - cloning and building the repo on both nodes
@@ -28,7 +28,7 @@ This runbook covers:
 - regenerating cluster `analysis/` and `figures/` outputs
 - collecting the final artifacts under `results/cluster/...`
 
-The generic Phase 6-8 automation remains single-machine oriented. This runbook adds the repository's dedicated operator wrapper only for the validated `rag-head + rag-worker1` physical-cluster case:
+The generic Phase 6-8 automation remains single-machine oriented. This runbook adds the repository's dedicated operator wrapper only for the validated `rag-header + rag-worker1` physical-cluster case:
 
 - `scripts/run_cluster_two_node_bundle.sh`
 - `scripts/run_cluster_postprocess.sh`
@@ -37,8 +37,8 @@ The generic Phase 6-8 automation remains single-machine oriented. This runbook a
 
 ```text
 Windows host
-`-- WSL2 Ubuntu 24.04 guest
-    `-- head node: rag-head
+`-- worker node: rag-header
+    `-- IP: 192.168.1.200
 
 Ubuntu server on LAN
 `-- worker node: rag-worker1
@@ -49,269 +49,54 @@ Canonical values used throughout this guide:
 
 - repo path on both nodes: `~/work/Parallel-Retrieval-Engine-for-RAG`
 - Linux username on both nodes: `rag`
-- worker slot budget: `SERVER_SLOTS=4`
-- recommended large-run benchmark storage root on the head node: `/mnt/e/data/pdp_retrieve_engine`
-
-The head-node slot budget is detected at setup time with:
+The slot budget is detected at setup time with:
 
 ```bash
 lscpu -p=Core,Socket | grep -v '^#' | sort -u | wc -l
 ```
 
-In the validated run, this returned `10`, which produced:
-
-```text
-P_TOTAL = LOCAL_SLOTS + SERVER_SLOTS = 14
-```
-
-## 1. Prepare The Windows Host For A WSL Head Node
-
-This section runs on the Windows host, not inside Ubuntu.
-
-### Prerequisites
-
-- Windows 11 with administrator access
-- WSL2 available
-- a LAN connection to the Ubuntu server worker
-
-### PowerShell
-
-Install Ubuntu 24.04 if needed:
-
-```powershell
-wsl --install -d Ubuntu-24.04
-```
-
-Create or update `C:\Users\<you>\.wslconfig` so the Ubuntu guest uses mirrored networking:
-
-```ini
-[wsl2]
-networkingMode=mirrored
-dnsTunneling=true
-firewall=false
-autoProxy=true
-```
-
-Apply the change:
-
-```powershell
-wsl.exe --shutdown
-```
-
-Then allow inbound LAN traffic to mirrored-mode WSL through the Hyper-V firewall. This step was required in the validated run so the worker could connect back to the head node on dynamic MPI ports.
-
-```powershell
-Set-NetFirewallHyperVVMSetting `
-  -Name '{40E0AC32-46A5-438A-A0B2-2B479E8F2E90}' `
-  -DefaultInboundAction Allow
-```
-
-### What success looks like
-
-- WSL restarts cleanly
-- the Ubuntu guest later gets a LAN-visible `192.168.1.x` address
-- the worker can later reach the head node over LAN on `:22`
-
-## 2. Normalize The Local WSL Head Node
-
-All commands in this section run inside the Ubuntu 24.04 WSL guest.
-
-### Prerequisites
-
-- the Windows-side mirrored-networking and Hyper-V firewall steps are already done
-
-### Bash
-
-If you are still entering Ubuntu as `root`, create the normal Linux user `rag` and make it the default WSL user:
-
-```bash
-id -u rag >/dev/null 2>&1 || sudo useradd -m -s /bin/bash rag
-sudo usermod -aG sudo rag
-sudo tee /etc/wsl.conf >/dev/null <<'EOF'
-[boot]
-systemd=true
-
-[user]
-default=rag
-EOF
-```
-
-Restart WSL from Windows:
-
-```powershell
-wsl.exe --shutdown
-```
-
-Re-enter Ubuntu as `rag`, then set the hostname and enable SSH:
-
-```bash
-sudo hostnamectl set-hostname rag-head
-sudo apt update
-sudo apt install -y openssh-server
-sudo systemctl enable --now ssh
-```
-
-Verify the head node and record its current LAN IPv4 address:
-
-```bash
-whoami
-hostnamectl --static
-hostname -I
-ss -tln | grep ':22'
-HEAD_IP=$(ip -4 -o addr show scope global | awk '{split($4,a,"/"); print a[1]; exit}')
-echo "${HEAD_IP}"
-```
-
-### What success looks like
-
-- `whoami` prints `rag`
-- `hostnamectl --static` prints `rag-head`
-- `hostname -I` shows a LAN-visible address instead of a NAT-only `172.x.x.x`
-- SSH listens on `:22`
-- you recorded the current `HEAD_IP`
-
-## 3. Clone And Build The Repo On The Head Node
-
-### Prerequisites
-
-- you are logged into the WSL Ubuntu guest as `rag`
-
-### Bash
-
-```bash
-mkdir -p ~/work
-cd ~/work
-git clone <your-remote-url> Parallel-Retrieval-Engine-for-RAG
-cd ~/work/Parallel-Retrieval-Engine-for-RAG
-
-chmod +x scripts/*.sh
-./scripts/setup_wsl_dev_env.sh
-./scripts/configure_release.sh
-cmake --build build/release
-
-test -x ./build/release/parallel_retriever
-test -x ./build/release/sequential_retriever
-test -x ./build/release/verify_results
-```
-
-### What success looks like
-
-- the release build completes cleanly
-- the key binaries exist under `build/release/`
-
-## 4. Prepare The Ubuntu Server Worker
-
-This section starts from an existing bootstrap account on the Ubuntu server. Do not store the bootstrap password in the repo. Use your current admin-capable login account interactively.
-
-### Prerequisites
-
-- the worker is reachable on LAN at `192.168.1.199`
-- you have an existing SSH login on the worker with `sudo`
-
-### Bash
-
-Log in to the worker:
-
-```bash
-ssh <bootstrap-user>@192.168.1.199
-```
-
-Create the Linux user `rag`, grant `sudo`, and set the hostname:
-
-```bash
-sudo useradd -m -s /bin/bash rag
-sudo usermod -aG sudo rag
-sudo hostnamectl set-hostname rag-worker1
-```
-
-Prepare the canonical repo path:
-
-```bash
-sudo mkdir -p /home/rag/work
-sudo chown -R rag:rag /home/rag/work
-```
-
-Clone and build as `rag`:
-
-```bash
-sudo -u rag bash -lc '
-  set -euo pipefail
-  cd ~/work
-  git clone <your-remote-url> Parallel-Retrieval-Engine-for-RAG
-  cd ~/work/Parallel-Retrieval-Engine-for-RAG
-  chmod +x scripts/*.sh
-  ./scripts/setup_wsl_dev_env.sh
-  ./scripts/configure_release.sh
-  cmake --build build/release
-'
-```
-
-Verify:
-
-```bash
-hostnamectl --static
-sudo -u rag bash -lc '
-  cd ~/work/Parallel-Retrieval-Engine-for-RAG
-  realpath .
-  test -x ./build/release/parallel_retriever
-  test -x ./build/release/sequential_retriever
-'
-```
-
-### What success looks like
-
-- `hostnamectl --static` prints `rag-worker1`
-- the worker repo and release binaries exist under `/home/rag`
-
-## 5. Stabilize Hostname Resolution
+## 1. Stabilize Hostname Resolution
 
 Do this on both nodes.
 
-### Prerequisites
-
-- you know the current `HEAD_IP` from step 2
-- the worker IP is `192.168.1.199`
-
 ### Bash
 
-On `rag-head`:
+On `rag-header`:
 
 ```bash
-HEAD_IP="<head-node-ip-from-step-2>"
 sudo tee -a /etc/hosts >/dev/null <<EOF
-${HEAD_IP} rag-head
+192.168.1.200 rag-header
 192.168.1.199 rag-worker1
 EOF
-getent hosts rag-head rag-worker1
+getent hosts rag-header rag-worker1
 ```
 
 On `rag-worker1`:
 
 ```bash
-HEAD_IP="<head-node-ip-from-step-2>"
 sudo tee -a /etc/hosts >/dev/null <<EOF
-${HEAD_IP} rag-head
+192.168.1.200 rag-header
 192.168.1.199 rag-worker1
 EOF
-getent hosts rag-head rag-worker1
+getent hosts rag-header rag-worker1
 ```
 
 ### What success looks like
 
-- both nodes resolve `rag-head` and `rag-worker1`
+- both nodes resolve `rag-header` and `rag-worker1`
 
-## 6. Configure Passwordless SSH From Head To Worker
+## 2. Configure Passwordless SSH From Head To Worker
 
-All commands in this section run from `rag-head`.
+All commands in this section run from `rag-header`.
 
 ### Prerequisites
 
 - the worker already has Linux user `rag`
-- the head node can SSH to the worker through the bootstrap path
+- the header node can SSH to the worker through the bootstrap path
 
 ### Bash
 
-Create the SSH key on the head node:
+Create the SSH key on the header node:
 
 ```bash
 mkdir -p ~/.ssh
@@ -357,9 +142,9 @@ ssh rag-worker1 hostname
 
 - both SSH commands return `rag-worker1` without a password prompt
 
-## 7. Create The Two-Node Hostfile
+## 3. Create The Two-Node Hostfile
 
-All commands in this section run from `rag-head`.
+All commands in this section run from `rag-header`.
 
 ### Bash
 
@@ -368,51 +153,30 @@ cd ~/work/Parallel-Retrieval-Engine-for-RAG
 LOCAL_SLOTS=$(lscpu -p=Core,Socket | grep -v '^#' | sort -u | wc -l)
 SERVER_SLOTS=4
 mkdir -p .cache/cluster
-cat > .cache/cluster/hosts.local-plus-199 <<EOF
-rag-head slots=${LOCAL_SLOTS} max-slots=${LOCAL_SLOTS}
+cat > .cache/cluster/hosts.two-nodes <<EOF
+rag-header slots=${LOCAL_SLOTS} max-slots=${LOCAL_SLOTS}
 rag-worker1 slots=${SERVER_SLOTS} max-slots=${SERVER_SLOTS}
 EOF
-cat .cache/cluster/hosts.local-plus-199
+cat .cache/cluster/hosts.two-nodes
 ```
 
 ### What success looks like
 
 - the hostfile contains exactly two lines
-- `rag-head` uses the detected slot count
+- `rag-header` uses the detected slot count
 - `rag-worker1` uses `slots=4 max-slots=4`
 
-## 8. Validate MPI Transport And Remote Launch
+## 3. Validate MPI Transport And Remote Launch
 
-All commands in this section run from `rag-head`.
-
-### Why the extra flags matter
-
-The validated WSL head node needed:
-
-- `HWLOC_COMPONENTS=-gl`
-  - avoids `mpirun` hanging on WSLg/X11-related `hwloc` probing
-- `--mca oob_tcp_disable_ipv6_family 1`
-  - keeps OpenMPI bootstrap off IPv6 paths
-- `--mca oob_tcp_if_include 192.168.1.0/24`
-  - keeps OOB traffic on the LAN subnet
-- `--mca btl self,tcp`
-- `--mca btl_tcp_if_include 192.168.1.0/24`
-  - keeps MPI data traffic on the IPv4 LAN path
+All commands in this section run from `rag-header`.
 
 ### Bash
 
 Hostname smoke:
 
 ```bash
-cd ~/work/Parallel-Retrieval-Engine-for-RAG
-env HWLOC_COMPONENTS=-gl \
-  mpirun \
-  -x HWLOC_COMPONENTS \
-  --mca oob_tcp_disable_ipv6_family 1 \
-  --mca oob_tcp_if_include 192.168.1.0/24 \
-  --mca btl self,tcp \
-  --mca btl_tcp_if_include 192.168.1.0/24 \
-  --hostfile .cache/cluster/hosts.local-plus-199 \
+mpirun \
+  --hostfile .cache/cluster/hosts.two-nodes \
   --map-by ppr:1:node \
   -np 2 \
   hostname
@@ -422,14 +186,8 @@ Help-path smoke:
 
 ```bash
 cd ~/work/Parallel-Retrieval-Engine-for-RAG
-env HWLOC_COMPONENTS=-gl \
-  mpirun \
-  -x HWLOC_COMPONENTS \
-  --mca oob_tcp_disable_ipv6_family 1 \
-  --mca oob_tcp_if_include 192.168.1.0/24 \
-  --mca btl self,tcp \
-  --mca btl_tcp_if_include 192.168.1.0/24 \
-  --hostfile .cache/cluster/hosts.local-plus-199 \
+mpirun \
+  --hostfile .cache/cluster/hosts.two-nodes \
   --map-by ppr:1:node \
   -np 2 \
   ./build/release/parallel_retriever --help
@@ -440,15 +198,15 @@ env HWLOC_COMPONENTS=-gl \
 - the hostname smoke prints:
 
 ```text
-rag-head
+rag-header
 rag-worker1
 ```
 
 - the help-path smoke exits `0`
 
-## 9. Run The Small Exactness Smoke
+## 4. Run The Small Exactness Smoke
 
-All commands in this section run from `rag-head`.
+All commands in this section run from `rag-header`.
 
 ### Bash
 
@@ -476,14 +234,8 @@ rsync -a data/cluster_smoke/ \
   --output results/cluster_smoke/sequential_topk.csv \
   --run-metrics results/cluster_smoke/sequential_run_metrics.csv
 
-env HWLOC_COMPONENTS=-gl \
-  mpirun \
-  -x HWLOC_COMPONENTS \
-  --mca oob_tcp_disable_ipv6_family 1 \
-  --mca oob_tcp_if_include 192.168.1.0/24 \
-  --mca btl self,tcp \
-  --mca btl_tcp_if_include 192.168.1.0/24 \
-  --hostfile .cache/cluster/hosts.local-plus-199 \
+mpirun \
+  --hostfile .cache/cluster/hosts.two-nodes \
   --map-by ppr:1:node \
   -np 2 \
   ./build/release/parallel_retriever \
@@ -505,9 +257,9 @@ env HWLOC_COMPONENTS=-gl \
 
 - `verify_results` prints `All queries PASS`
 
-## 10. Run The Canonical Two-Node Benchmark
+## 5. Run The Canonical Two-Node Benchmark
 
-All commands in this section run from `rag-head`.
+All commands in this section run from `rag-header`.
 
 ### Canonical profile
 
@@ -516,40 +268,26 @@ All commands in this section run from `rag-head`.
 - `Q=100`
 - `k=10`
 
-### Recommended run tag
-
-For a fresh rerun:
-
-```bash
-RUN_TAG="$(date +%F)-local-plus-199"
-```
-
-To reproduce the original validated output path exactly:
-
-```bash
-RUN_TAG="2026-06-22-local-plus-199"
-```
 
 ### Bash
 
 ```bash
 cd ~/work/Parallel-Retrieval-Engine-for-RAG
 
-RUN_TAG="$(date +%F)-local-plus-199"
+RUN_TAG="$(date +%F)-two-nodes"
 RESULT_DIR="results/cluster/${RUN_TAG}"
-DATA_DIR="data/cluster_local_plus_199"
-HEAD_IP=$(ip -4 -o addr show scope global | awk '{split($4,a,"/"); print a[1]; exit}')
+DATA_DIR="data/cluster_two_node"
 LOCAL_SLOTS=$(lscpu -p=Core,Socket | grep -v '^#' | sort -u | wc -l)
 SERVER_SLOTS=4
 P_TOTAL=$((LOCAL_SLOTS + SERVER_SLOTS))
 
 mkdir -p "${RESULT_DIR}" "${DATA_DIR}"
-cp .cache/cluster/hosts.local-plus-199 "${RESULT_DIR}/hostfile.snapshot.txt"
+cp .cache/cluster/hosts.two-nodes "${RESULT_DIR}/hostfile.snapshot.txt"
 
 cat > "${RESULT_DIR}/run_notes.txt" <<EOF
 cluster_date=$(date +%F)
-head_node=rag-head
-head_ip=${HEAD_IP}
+head_node=rag-header
+head_ip=192.168.1.200
 worker_node=rag-worker1
 worker_ip=192.168.1.199
 local_slots=${LOCAL_SLOTS}
@@ -559,7 +297,6 @@ profile_N=100000
 profile_D=384
 profile_Q=100
 profile_k=10
-mpi_flags=HWLOC_COMPONENTS=-gl,oob_tcp_disable_ipv6_family=1,oob_tcp_if_include=192.168.1.0/24,btl=self,tcp,btl_tcp_if_include=192.168.1.0/24
 EOF
 
 ./build/release/generate_vectors \
@@ -582,14 +319,9 @@ rsync -a "${DATA_DIR}/" \
   --output "${RESULT_DIR}/sequential_topk.csv" \
   --run-metrics "${RESULT_DIR}/sequential_run_metrics.csv"
 
-env HWLOC_COMPONENTS=-gl \
-  mpirun \
-  -x HWLOC_COMPONENTS \
-  --mca oob_tcp_disable_ipv6_family 1 \
-  --mca oob_tcp_if_include 192.168.1.0/24 \
-  --mca btl self,tcp \
-  --mca btl_tcp_if_include 192.168.1.0/24 \
-  --hostfile .cache/cluster/hosts.local-plus-199 \
+mpirun \
+  --hostfile .cache/cluster/hosts.two-nodes \
+  --map-by slot \
   -np "${P_TOTAL}" \
   ./build/release/parallel_retriever \
   --vectors "${DATA_DIR}/memory_vectors.bin" \
@@ -612,9 +344,9 @@ env HWLOC_COMPONENTS=-gl \
 - `parallel_metrics.csv` has one header row plus `P_TOTAL` rank rows
 - both top-k CSVs have `Q * k + 1` lines
 
-## 11. Prepare The Dedicated Bundle Config
+## 6. Prepare The Dedicated Bundle Config
 
-All commands in this section run from the WSL-native `rag-head` checkout.
+All commands in this section run from the WSL-native `rag-header` checkout.
 
 ### Why this config exists
 
@@ -639,7 +371,7 @@ grep -E '^(CLUSTER_|BENCH_)' .cache/cluster/two_node_bundle.env
 
 At minimum, confirm these values match the real environment:
 
-- `CLUSTER_HOSTFILE="$HOME/work/Parallel-Retrieval-Engine-for-RAG/.cache/cluster/hosts.local-plus-199"`
+- `CLUSTER_HOSTFILE="$HOME/work/Parallel-Retrieval-Engine-for-RAG/.cache/cluster/hosts.two-nodes"`
 - `CLUSTER_WORKER_HOST="rag-worker1"`
 - `CLUSTER_WORKER_REPO_ROOT="$HOME/work/Parallel-Retrieval-Engine-for-RAG"`
 - `CLUSTER_SERVER_SLOTS=4`
@@ -650,7 +382,7 @@ At minimum, confirm these values match the real environment:
 Why these two storage knobs matter on the current Windows + WSL machine:
 
 - `BENCH_STORAGE_ROOT` moves the heavy bundle outputs off the WSL ext4 virtual disk on `C:`
-- `CLUSTER_RUNTIME_ROOT` stays repo-local so the wrapper can create lightweight symlinks on the head node and sync real dataset files to the worker under the same repo-relative paths
+- `CLUSTER_RUNTIME_ROOT` stays repo-local so the wrapper can create lightweight symlinks on the header node and sync real dataset files to the worker under the same repo-relative paths
 
 ### What success looks like
 
@@ -658,14 +390,14 @@ Why these two storage knobs matter on the current Windows + WSL machine:
 - the file points at the real two-node hostfile
 - the file still contains only shell variable assignments
 
-## 12. Run The Full Two-Node Bundle
+## 7. Run The Full Two-Node Bundle
 
-All commands in this section run from the WSL-native `rag-head` checkout.
+All commands in this section run from the WSL-native `rag-header` checkout.
 
 ### Prerequisites
 
 - steps `1` through `11` already succeeded
-- the head checkout is the WSL-native repo path:
+- the header checkout is the WSL-native repo path:
   - `~/work/Parallel-Retrieval-Engine-for-RAG`
 - the worker still responds through `ssh rag-worker1 hostname`
 
@@ -673,7 +405,7 @@ All commands in this section run from the WSL-native `rag-head` checkout.
 
 ```bash
 cd ~/work/Parallel-Retrieval-Engine-for-RAG
-RUN_TAG="$(date +%F)-local-plus-199-full-bundle"
+RUN_TAG="$(date +%F)-two-nodes-full-bundle"
 
 mkdir -p /mnt/e/data/pdp_retrieve_engine
 
@@ -718,7 +450,7 @@ bash ./scripts/run_cluster_two_node_bundle.sh \
 The validated final rerun on `2026-06-23` did not restart from zero after the operator decided to skip FAISS. Instead, it reused the finished calibration outputs from the same run tag:
 
 - run tag:
-  - `2026-06-23-local-plus-199-e-root-final`
+  - `2026-06-23-two-nodes-e-root-final`
 - selected synthetic benchmark point:
   - `N_SELECTED=10000000`
   - `Q=400`
@@ -740,7 +472,7 @@ Use this recovery path when:
 
 ```bash
 cd ~/work/Parallel-Retrieval-Engine-for-RAG
-RUN_TAG=2026-06-23-local-plus-199-e-root-final
+RUN_TAG=2026-06-23-two-nodes-e-root-final
 RESULT_DIR=/mnt/e/data/pdp_retrieve_engine/results/cluster/${RUN_TAG}
 PROBE_DIR=/mnt/e/data/pdp_retrieve_engine/scratch/cluster_bundle/${RUN_TAG}/probes
 
@@ -754,7 +486,7 @@ cp "${RESULT_DIR}/parallel_metrics.csv" "${RESULT_DIR}/granularity.csv"
 
 python3 - <<'PY'
 from pathlib import Path
-result_dir = Path("/mnt/e/data/pdp_retrieve_engine/results/cluster/2026-06-23-local-plus-199-e-root-final")
+result_dir = Path("/mnt/e/data/pdp_retrieve_engine/results/cluster/2026-06-23-two-nodes-e-root-final")
 result_dir.joinpath("benchmark_selection.env").write_text(
     "N_SELECTED=10000000\n"
     "N_SPEEDUP=2000000\n"
@@ -854,7 +586,7 @@ If you want the final cluster outputs to also appear under the repo `results/` t
 
 ```bash
 cd ~/work/Parallel-Retrieval-Engine-for-RAG
-RUN_TAG="$(date +%F)-local-plus-199-full-bundle"
+RUN_TAG="$(date +%F)-two-nodes-full-bundle"
 mkdir -p results/cluster/"${RUN_TAG}"
 rsync -a \
   /mnt/e/data/pdp_retrieve_engine/results/cluster/"${RUN_TAG}"/ \
@@ -869,7 +601,7 @@ Use this when the raw cluster CSVs already exist but `analysis/`, `figures/`, or
 
 ```bash
 cd ~/work/Parallel-Retrieval-Engine-for-RAG
-RUN_TAG="$(date +%F)-local-plus-199-full-bundle"
+RUN_TAG="$(date +%F)-two-nodes-full-bundle"
 RESULT_DIR="/mnt/e/data/pdp_retrieve_engine/results/cluster/${RUN_TAG}"
 
 bash ./scripts/run_cluster_postprocess.sh \
@@ -942,12 +674,12 @@ results/cluster/<run-tag>/
 
 ## 15. Final Verification Checklist
 
-Run these checks from `rag-head`:
+Run these checks from `rag-header`:
 
 ```bash
 cd ~/work/Parallel-Retrieval-Engine-for-RAG
 
-RUN_TAG="$(date +%F)-local-plus-199-full-bundle"
+RUN_TAG="$(date +%F)-two-nodes-full-bundle"
 RESULT_DIR="/mnt/e/data/pdp_retrieve_engine/results/cluster/${RUN_TAG}"
 
 test -f "${RESULT_DIR}/runtime_by_N.csv"
@@ -968,8 +700,8 @@ test -f "${RESULT_DIR}/figures/speedup_curves.png"
 wc -l "${RESULT_DIR}/parallel_metrics.csv"
 wc -l "${RESULT_DIR}/parallel_topk.csv"
 wc -l "${RESULT_DIR}/sequential_topk.csv"
-head -n 5 "${RESULT_DIR}/correctness.csv"
-head -n 20 "${RESULT_DIR}/analysis/final_conclusions.md"
+header -n 5 "${RESULT_DIR}/correctness.csv"
+header -n 20 "${RESULT_DIR}/analysis/final_conclusions.md"
 cat "${RESULT_DIR}/parallel_run_metrics.csv"
 cat "${RESULT_DIR}/sequential_run_metrics.csv"
 ```
@@ -993,7 +725,7 @@ You only need this if:
 - or your editing workspace is a separate Windows checkout and you want a Windows-visible copy
 
 ```bash
-RUN_TAG="$(date +%F)-local-plus-199-full-bundle"
+RUN_TAG="$(date +%F)-two-nodes-full-bundle"
 mkdir -p ~/work/Parallel-Retrieval-Engine-for-RAG/results/cluster/"${RUN_TAG}"
 rsync -a \
   /mnt/e/data/pdp_retrieve_engine/results/cluster/"${RUN_TAG}"/ \
@@ -1003,7 +735,7 @@ rsync -a \
 Optional Windows-mounted copy:
 
 ```bash
-RUN_TAG="$(date +%F)-local-plus-199-full-bundle"
+RUN_TAG="$(date +%F)-two-nodes-full-bundle"
 rsync -a \
   /mnt/e/data/pdp_retrieve_engine/results/cluster/"${RUN_TAG}"/ \
   /mnt/d/DS-AI/Parallel-Retrieval-Engine-for-RAG/results/cluster/"${RUN_TAG}"/
@@ -1017,14 +749,14 @@ If this exact runbook stalls:
 
 - `ssh rag-worker1 hostname` works, but `mpirun` hangs before printing anything
   - re-check `HWLOC_COMPONENTS=-gl`
-- worker launches but cannot connect back to the head node
+- worker launches but cannot connect back to the header node
   - re-check mirrored networking
   - re-check the Hyper-V firewall inbound allow step
-  - verify the worker can open `192.168.1.x:22` on the head node
-- head node IP changed after WSL restart
+  - verify the worker can open `192.168.1.x:22` on the header node
+- header node IP changed after WSL restart
   - update `/etc/hosts`
   - update `~/.ssh/config` if needed
-  - regenerate `hosts.local-plus-199`
+  - regenerate `hosts.two-nodes`
 - `run_cluster_two_node_bundle.sh` refuses to start
   - confirm you launched it from:
     - `~/work/Parallel-Retrieval-Engine-for-RAG`

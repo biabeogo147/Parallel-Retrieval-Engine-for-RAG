@@ -22,6 +22,7 @@ whoami
 id
 getent passwd rag || sudo adduser rag
 sudo usermod -aG sudo rag
+sudo passwd rag
 getent passwd rag
 sudo -l -U rag
 ```
