@@ -569,27 +569,4 @@ What you want to see:
   - `analysis/final_conclusions.md` states that FAISS was skipped
   - `analysis/faiss_analysis.csv` still exists, even if it has header-only content
 
-## Troubleshooting Shortlist
-
-If this exact runbook stalls:
-
-- `ssh rag-worker1 hostname` works, but `mpirun` hangs before printing anything
-  - re-check `HWLOC_COMPONENTS=-gl`
-- worker launches but cannot connect back to the header node
-  - re-check mirrored networking
-  - re-check the Hyper-V firewall inbound allow step
-  - verify the worker can open `192.168.1.x:22` on the header node
-- header node IP changed after WSL restart
-  - update `/etc/hosts`
-  - update `~/.ssh/config` if needed
-  - regenerate `hosts.two-nodes`
-- `run_cluster_two_node_bundle.sh` refuses to start
-  - confirm you launched it from:
-    - `~/work/Parallel-Retrieval-Engine-for-RAG`
-  - do not launch the real bundle from:
-    - `/mnt/d/DS-AI/Parallel-Retrieval-Engine-for-RAG`
-- `parallel_retriever` works on one node but hangs across two nodes
-  - keep the IPv4-only MPI flags exactly as shown
-  - verify the hostfile names resolve correctly on both nodes
-
 For broader cluster problems, continue with [troubleshooting.md](troubleshooting.md).
