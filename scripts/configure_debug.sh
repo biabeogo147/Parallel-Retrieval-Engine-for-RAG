@@ -3,7 +3,7 @@
 set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-bash "$script_dir/common.sh"
+. "$script_dir/common.sh"
 
 require_command cmake
 require_command mpicxx

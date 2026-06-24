@@ -3,7 +3,7 @@
 set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-bash "$script_dir/benchmark_common.sh"
+. "$script_dir/benchmark_common.sh"
 
 nnode_die() {
     echo "$1" >&2

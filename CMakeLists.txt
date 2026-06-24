@@ -325,6 +325,14 @@ if(BUILD_TESTING)
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/RunBenchmarkSelectNSmoke.cmake
     )
     add_test(
+        NAME configure_scripts_smoke
+        COMMAND
+            ${CMAKE_COMMAND}
+            -DREPO_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -P
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/RunConfigureScriptsSmoke.cmake
+    )
+    add_test(
         NAME benchmark_calibrate_target_n_only_smoke
         COMMAND
             ${CMAKE_COMMAND}

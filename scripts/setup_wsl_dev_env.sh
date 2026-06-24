@@ -3,7 +3,7 @@
 set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-bash "$script_dir/common.sh"
+. "$script_dir/common.sh"
 
 if [ "$(uname -s)" != "Linux" ]; then
     echo "Run this script inside the Ubuntu WSL environment." >&2
