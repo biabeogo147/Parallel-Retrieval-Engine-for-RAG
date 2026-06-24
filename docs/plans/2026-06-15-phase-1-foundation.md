@@ -118,12 +118,12 @@ only where needed for automated verification.
 - [x] `mpirun --version`
 - [x] `cmake --version`
 - [x] `ninja --version`
-- [x] `./scripts/configure_debug.sh`
+- [x] `bash scripts/configure_debug.sh`
 - [x] `cmake --build build/debug`
 - [x] `ctest --test-dir build/debug --output-on-failure`
 - [x] `./build/debug/sequential_retriever --help`
 - [x] `OMPI_ALLOW_RUN_AS_ROOT=1 OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1 mpirun -np 4 ./build/debug/parallel_retriever --help`
-- [x] `./scripts/run_smoke_tests.sh`
+- [x] `bash scripts/run_smoke_tests.sh`
 
 **Observed result:** all five CTest cases passed, both CLI help paths worked, and the smoke script completed successfully.
 

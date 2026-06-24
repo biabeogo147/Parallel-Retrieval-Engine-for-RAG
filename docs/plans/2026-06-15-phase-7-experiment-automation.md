@@ -108,7 +108,7 @@
 - [x] `ctest --test-dir build/debug --output-on-failure -R 'benchmark_select_n_smoke|benchmark_correctness_script_smoke|benchmark_granularity_script_smoke|benchmark_speedup_script_smoke'`
 - [x] `ctest --test-dir build/debug --output-on-failure -R 'benchmark_all_experiments_smoke'`
 - [x] `ctest --test-dir build/debug --output-on-failure`
-- [x] `bash ./scripts/run_all_experiments.sh`
+- [x] `bash scripts/run_all_experiments.sh`
 
 **Observed result:**
 

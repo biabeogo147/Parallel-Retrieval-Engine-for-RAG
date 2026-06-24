@@ -1,4 +1,4 @@
-﻿# Kế hoạch project: MPI-Based Parallel Long-Term Memory Retriever for AI Agent
+# Kế hoạch project: MPI-Based Parallel Long-Term Memory Retriever for AI Agent
 
 ## 0. Tóm tắt quyết định project
 
@@ -1403,7 +1403,7 @@ Report trả lời đủ toàn bộ yêu cầu đề.
 
 ```bash
 cd ~/work/Parallel-Retrieval-Engine-for-RAG
-./scripts/configure_release.sh
+bash scripts/configure_release.sh
 cmake --build build/release
 ```
 
@@ -1449,7 +1449,7 @@ mpirun -np 12 ./build/release/parallel_retriever \
 ### Run speedup benchmark
 
 ```bash
-bash ./scripts/run_speedup.sh
+bash scripts/run_speedup.sh
 ```
 
 ### Run FAISS synthetic comparison
@@ -1483,7 +1483,7 @@ python3 scripts/prepare_squad_minilm.py \
 ### Run full FAISS comparison workflow
 
 ```bash
-bash ./scripts/run_faiss_comparison.sh
+bash scripts/run_faiss_comparison.sh
 ```
 
 ---

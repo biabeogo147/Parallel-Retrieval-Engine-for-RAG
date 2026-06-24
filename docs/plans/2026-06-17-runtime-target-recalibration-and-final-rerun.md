@@ -213,7 +213,7 @@ Observed result:
 Executed successfully:
 
 ```bash
-bash ./scripts/run_calibrate_target.sh
+bash scripts/run_calibrate_target.sh
 ```
 
 ### Correctness
@@ -221,7 +221,7 @@ bash ./scripts/run_calibrate_target.sh
 Executed successfully:
 
 ```bash
-bash ./scripts/run_correctness.sh
+bash scripts/run_correctness.sh
 ```
 
 Observed result:
@@ -233,7 +233,7 @@ Observed result:
 Executed successfully:
 
 ```bash
-bash ./scripts/run_granularity.sh
+bash scripts/run_granularity.sh
 ```
 
 ### Speedup
@@ -241,7 +241,7 @@ bash ./scripts/run_granularity.sh
 Executed successfully:
 
 ```bash
-bash ./scripts/run_speedup.sh
+bash scripts/run_speedup.sh
 ```
 
 ### Plot generation
@@ -339,9 +339,9 @@ This was an execution workaround for the final rerun, not a change to the projec
 
 ```bash
 ctest --test-dir build/debug --output-on-failure
-bash ./scripts/run_calibrate_target.sh
-bash ./scripts/run_correctness.sh
-bash ./scripts/run_granularity.sh
-bash ./scripts/run_speedup.sh
+bash scripts/run_calibrate_target.sh
+bash scripts/run_correctness.sh
+bash scripts/run_granularity.sh
+bash scripts/run_speedup.sh
 python3 ./scripts/analyze_benchmarks.py ...
 ```

@@ -201,7 +201,7 @@ mkdir -p ~/work
 cd ~/work
 git clone <your-remote-url> Parallel-Retrieval-Engine-for-RAG
 cd ~/work/Parallel-Retrieval-Engine-for-RAG
-./scripts/setup_wsl_dev_env.sh
+bash scripts/setup_wsl_dev_env.sh
 ```
 
 **Expected artifacts**
@@ -228,11 +228,11 @@ cd ~/work/Parallel-Retrieval-Engine-for-RAG
 
 ```bash
 cd ~/work/Parallel-Retrieval-Engine-for-RAG
-./scripts/configure_debug.sh
+bash scripts/configure_debug.sh
 cmake --build build/debug
 ctest --test-dir build/debug --output-on-failure
-./scripts/run_smoke_tests.sh
-./scripts/configure_release.sh
+bash scripts/run_smoke_tests.sh
+bash scripts/configure_release.sh
 cmake --build build/release
 ```
 

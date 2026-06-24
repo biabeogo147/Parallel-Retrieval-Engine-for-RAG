@@ -1,4 +1,4 @@
-﻿# Data Pipeline And Benchmarks
+# Data Pipeline And Benchmarks
 
 This file merges the former `benchmark_data.md` and `dataset_pipeline.md` without shortening their content.
 
@@ -569,7 +569,7 @@ Here `X` means the detected physical core count inside WSL. The scripts keep `BE
 Command:
 
 ```bash
-bash ./scripts/run_calibrate_target.sh
+bash scripts/run_calibrate_target.sh
 ```
 
 `run_select_N.sh` is still present, but it now acts only as a compatibility wrapper that delegates to `run_calibrate_target.sh`.
@@ -620,7 +620,7 @@ Interpretation rules:
 Command:
 
 ```bash
-bash ./scripts/run_correctness.sh
+bash scripts/run_correctness.sh
 ```
 
 Outputs:
@@ -636,7 +636,7 @@ This stage loads `benchmark_selection.env`, runs the canonical sequential and pa
 Command:
 
 ```bash
-bash ./scripts/run_granularity.sh
+bash scripts/run_granularity.sh
 ```
 
 Outputs:
@@ -651,7 +651,7 @@ Outputs:
 Command:
 
 ```bash
-bash ./scripts/run_speedup.sh
+bash scripts/run_speedup.sh
 ```
 
 Outputs:
@@ -678,7 +678,7 @@ Rules:
 Command:
 
 ```bash
-bash ./scripts/run_all_experiments.sh
+bash scripts/run_all_experiments.sh
 ```
 
 This orchestration script runs:
@@ -796,7 +796,7 @@ The output directory contains:
 The maintained command-first orchestration entrypoint is:
 
 ```bash
-bash ./scripts/run_faiss_comparison.sh
+bash scripts/run_faiss_comparison.sh
 ```
 
 This script:
@@ -942,7 +942,7 @@ Typical WSL flow:
 
 ```bash
 cd ~/work/Parallel-Retrieval-Engine-for-RAG
-./scripts/configure_debug.sh
+bash scripts/configure_debug.sh
 cmake --build build/debug
 ctest --test-dir build/debug --output-on-failure
 ./build/debug/generate_vectors --N 100000 --D 384 --output data/memory_vectors.bin
@@ -951,7 +951,7 @@ ctest --test-dir build/debug --output-on-failure
 ./build/debug/sequential_retriever --vectors data/memory_vectors.bin --queries data/query_vectors.bin --topk 10 --output results/sequential_topk.csv --run-metrics results/sequential_run_metrics.csv
 mpirun -np 4 ./build/debug/parallel_retriever --vectors data/memory_vectors.bin --queries data/query_vectors.bin --topk 10 --output results/parallel_topk.csv --metrics results/parallel_metrics.csv --run-metrics results/parallel_run_metrics.csv
 ./build/debug/verify_results --sequential results/sequential_topk.csv --parallel results/parallel_topk.csv --epsilon 1e-5 --output results/correctness.csv
-bash ./scripts/run_all_experiments.sh
-bash ./scripts/run_faiss_comparison.sh
+bash scripts/run_all_experiments.sh
+bash scripts/run_faiss_comparison.sh
 ```
 

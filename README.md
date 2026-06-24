@@ -82,11 +82,11 @@ cd Parallel-Retrieval-Engine-for-RAG
 Install the development toolchain, configure a debug build, and run the repository smoke wrapper:
 
 ```bash
-./scripts/setup_wsl_dev_env.sh
-./scripts/configure_debug.sh
+bash scripts/setup_wsl_dev_env.sh
+bash scripts/configure_debug.sh
 cmake --build build/debug
 ctest --test-dir build/debug --output-on-failure
-./scripts/run_smoke_tests.sh
+bash scripts/run_smoke_tests.sh
 ```
 
 This is the compact onboarding path. For the full command-first workflow set, use:

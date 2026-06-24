@@ -164,7 +164,7 @@ cd ~/work/Parallel-Retrieval-Engine-for-RAG
 
 ```bash
 cd ~/work/Parallel-Retrieval-Engine-for-RAG
-bash ./scripts/setup_wsl_dev_env.sh
+bash scripts/setup_wsl_dev_env.sh
 ```
 
 **Expected artifacts**
@@ -183,17 +183,17 @@ bash ./scripts/setup_wsl_dev_env.sh
 
 **Prerequisites**
 
-- `./scripts/setup_wsl_dev_env.sh` already succeeded.
+- `bash scripts/setup_wsl_dev_env.sh` already succeeded.
 
 **Bash**
 
 ```bash
 cd ~/work/Parallel-Retrieval-Engine-for-RAG
-bash ./scripts/configure_debug.sh
+bash scripts/configure_debug.sh
 cmake --build build/debug
 ctest --test-dir build/debug --output-on-failure
-bash ./scripts/run_smoke_tests.sh
-bash ./scripts/configure_release.sh
+bash scripts/run_smoke_tests.sh
+bash scripts/configure_release.sh
 cmake --build build/release
 ```
 

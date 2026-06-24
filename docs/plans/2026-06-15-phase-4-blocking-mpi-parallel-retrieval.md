@@ -118,7 +118,7 @@
 
 **Ubuntu WSL checks actually run from `/mnt/d/DS-AI/Parallel-Retrieval-Engine-for-RAG`:**
 
-- [x] `./scripts/configure_debug.sh`
+- [x] `bash scripts/configure_debug.sh`
 - [x] `cmake --build build/debug`
 - [x] `ctest --test-dir build/debug --output-on-failure`
 - [x] `./build/debug/generate_vectors --N 64 --D 8 --output data/memory_vectors.bin`

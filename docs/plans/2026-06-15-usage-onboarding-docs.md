@@ -56,13 +56,13 @@
 
 **Ubuntu WSL checks actually run from `/mnt/d/DS-AI/Parallel-Retrieval-Engine-for-RAG`:**
 
-- [x] `./scripts/setup_wsl_dev_env.sh`
-- [x] `./scripts/configure_debug.sh`
+- [x] `bash scripts/setup_wsl_dev_env.sh`
+- [x] `bash scripts/configure_debug.sh`
 - [x] `cmake --build build/debug`
 - [x] `ctest --test-dir build/debug --output-on-failure`
-- [x] `./scripts/run_smoke_tests.sh`
+- [x] `bash scripts/run_smoke_tests.sh`
 - [x] the small synthetic retrieval flow from `docs/usage/retrieval-workflows.md`
-- [x] `bash ./scripts/run_all_experiments.sh`
+- [x] `bash scripts/run_all_experiments.sh`
 - [x] a reduced custom benchmark run using overridden `BENCH_*` variables
 
 **Observed result:**
