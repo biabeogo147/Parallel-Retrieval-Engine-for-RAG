@@ -2,6 +2,7 @@
 
 #include "Logger.hpp"
 
+#include <cstdint>
 #include <string>
 
 namespace retriever {
@@ -19,6 +20,7 @@ struct Config {
     std::string metrics_path;
     std::string run_metrics_path;
     int topk = 0;
+    std::uint64_t limit_n = 0;
     LogLevel log_level = LogLevel::Info;
 };
 

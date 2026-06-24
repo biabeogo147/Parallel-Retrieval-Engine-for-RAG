@@ -53,6 +53,27 @@ void test_invalid_topk() {
     expect_true(result.error.find("--topk") != std::string::npos, "topk error should mention flag");
 }
 
+void test_invalid_limit_n() {
+    const char* argv[] = {
+        "sequential_retriever",
+        "--vectors",
+        "vectors.bin",
+        "--queries",
+        "queries.bin",
+        "--output",
+        "out.csv",
+        "--topk",
+        "10",
+        "--limit-n",
+        "0",
+    };
+
+    const auto result = retriever::parse_config(AppMode::Sequential, 11, argv);
+
+    expect_true(!result.ok, "non-positive limit-n should fail");
+    expect_true(result.error.find("--limit-n") != std::string::npos, "limit-n error should mention flag");
+}
+
 void test_invalid_log_level() {
     const char* argv[] = {
         "sequential_retriever",
@@ -108,16 +129,19 @@ void test_parallel_valid_config() {
         "metrics.csv",
         "--run-metrics",
         "run.csv",
+        "--limit-n",
+        "16",
         "--log-level",
         "debug",
     };
 
-    const auto result = retriever::parse_config(AppMode::Parallel, 15, argv);
+    const auto result = retriever::parse_config(AppMode::Parallel, 17, argv);
 
     expect_true(result.ok, "parallel config should parse");
     expect_true(!result.config.show_help, "help flag should be unset");
     expect_true(result.config.metrics_path == "metrics.csv", "metrics path should parse");
     expect_true(result.config.run_metrics_path == "run.csv", "run metrics path should parse");
+    expect_true(result.config.limit_n == 16, "limit-n should parse");
     expect_true(result.config.topk == 10, "topk should parse");
     expect_true(result.config.log_level == LogLevel::Debug, "debug log level should parse");
 }
@@ -133,13 +157,16 @@ void test_sequential_accepts_run_metrics() {
         "out.csv",
         "--topk",
         "10",
+        "--limit-n",
+        "8",
         "--run-metrics",
         "run.csv",
     };
 
-    const auto result = retriever::parse_config(AppMode::Sequential, 11, argv);
+    const auto result = retriever::parse_config(AppMode::Sequential, 13, argv);
 
     expect_true(result.ok, "sequential config with run metrics should parse");
+    expect_true(result.config.limit_n == 8, "limit-n should parse");
     expect_true(result.config.run_metrics_path == "run.csv", "run metrics path should parse");
 }
 
@@ -149,8 +176,10 @@ void test_usage_text() {
 
     expect_true(sequential_usage.find("Usage: sequential_retriever") != std::string::npos, "sequential usage should contain binary name");
     expect_true(parallel_usage.find("Usage: parallel_retriever") != std::string::npos, "parallel usage should contain binary name");
+    expect_true(sequential_usage.find("--limit-n <int>") != std::string::npos, "sequential usage should document limit-n");
     expect_true(sequential_usage.find("--run-metrics <path>") != std::string::npos, "sequential usage should document run metrics");
     expect_true(parallel_usage.find("--metrics <path>") != std::string::npos, "parallel usage should document metrics");
+    expect_true(parallel_usage.find("--limit-n <int>") != std::string::npos, "parallel usage should document limit-n");
     expect_true(parallel_usage.find("--run-metrics <path>") != std::string::npos, "parallel usage should document run metrics");
     expect_true(
         parallel_usage.find("blocking MPI retrieval") != std::string::npos,
@@ -163,6 +192,7 @@ int main() {
     test_help_for_sequential();
     test_missing_required_options();
     test_invalid_topk();
+    test_invalid_limit_n();
     test_invalid_log_level();
     test_parallel_requires_metrics();
     test_parallel_valid_config();

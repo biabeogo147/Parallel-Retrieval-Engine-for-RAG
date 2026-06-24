@@ -350,6 +350,7 @@ The current exact sequential and blocking MPI retrievers consume these binary fi
 - the row-major flag to be present on both datasets
 - `topk >= 1`
 - `topk <= num_vectors` for the memory dataset
+- optional `--limit-n` must stay in `1..num_vectors`; when present it shrinks the effective memory-side `N` to the first `limit_n` rows before retrieval begins
 
 If any of those conditions fail, the retriever exits non-zero with a clear `Error: ...` message instead of silently continuing.
 
@@ -388,6 +389,17 @@ Typical WSL command:
   --output results/sequential_topk.csv
 ```
 
+Optional prefix rerun:
+
+```bash
+./build/debug/sequential_retriever \
+  --vectors data/memory_vectors.bin \
+  --queries data/query_vectors.bin \
+  --topk 10 \
+  --limit-n 1000000 \
+  --output results/sequential_topk.csv
+```
+
 ## Phase 4 Parallel Output
 
 Blocking MPI retrieval writes the same top-k CSV schema as the sequential path:
@@ -408,6 +420,18 @@ mpirun -np 4 ./build/debug/parallel_retriever \
   --vectors data/memory_vectors.bin \
   --queries data/query_vectors.bin \
   --topk 10 \
+  --output results/parallel_topk.csv \
+  --metrics results/parallel_metrics.csv
+```
+
+Optional prefix rerun:
+
+```bash
+mpirun -np 4 ./build/debug/parallel_retriever \
+  --vectors data/memory_vectors.bin \
+  --queries data/query_vectors.bin \
+  --topk 10 \
+  --limit-n 1000000 \
   --output results/parallel_topk.csv \
   --metrics results/parallel_metrics.csv
 ```

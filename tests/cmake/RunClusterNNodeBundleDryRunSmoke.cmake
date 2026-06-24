@@ -30,13 +30,13 @@ elseif(EXISTS "C:/Program Files/Git/bin/bash.exe")
 endif()
 
 file(WRITE "${hostfile_path}"
-    "rag-head slots=4 max-slots=4\n"
+    "rag-head slots=8 max-slots=8\n"
     "rag-worker1 slots=4 max-slots=4\n"
     "rag-worker2 slots=4 max-slots=4\n")
 file(WRITE "${selection_env_path}"
     "N_SELECTED=100000\n"
     "N_SPEEDUP=500000\n"
-    "P_SELECTED=12\n"
+    "P_SELECTED=16\n"
     "D=384\n"
     "Q=100\n"
     "K=10\n"
@@ -54,11 +54,13 @@ file(WRITE "${config_path}"
     "CLUSTER_SELECTED_QUERY_PATH=${selected_query_path}\n"
     "CLUSTER_SPEEDUP_MEMORY_PATH=${speedup_memory_path}\n"
     "CLUSTER_SPEEDUP_QUERY_PATH=${speedup_query_path}\n"
+    "CLUSTER_RUNTIME_MAX_MEMORY_PATH=${selected_memory_path}\n"
     "CLUSTER_HEAD_LAN_CIDR=192.168.1.0/24\n"
     "BENCH_BUILD_DIR=${BUILD_DIR}\n"
     "BENCH_STORAGE_ROOT=${storage_root}\n"
     "BENCH_PYTHON_STDLIB=python\n"
-    "BENCH_P_LIST=\"2 4 8 12\"\n")
+    "BENCH_N_CANDIDATES=\"25000 50000 75000 100000\"\n"
+    "BENCH_P_LIST=\"2 4 6 8 10 12 14 16 18 20 24 28 32\"\n")
 
 if(WIN32)
     execute_process(
@@ -92,17 +94,22 @@ if(NOT run_exit EQUAL 0)
 endif()
 
 foreach(required_text
-    "Stage 1/4: selected synthetic correctness run"
-    "Stage 2/4: granularity summary"
-    "Stage 3/4: speedup sweep"
-    "Stage 4/4: postprocess"
+    "Stage 1/5: runtime-by-N sweep"
+    "Stage 2/5: selected synthetic correctness run"
+    "Stage 3/5: granularity summary"
+    "Stage 4/5: speedup sweep"
+    "Stage 5/5: postprocess"
     "run_tag=smoke-n-node"
     "cluster_node_count=3"
-    "cluster_p_total=12"
+    "cluster_p_total=16"
     "cluster_results_dir="
     "external-storage/results/cluster/smoke-n-node"
     "external-storage/scratch/cluster_bundle/smoke-n-node"
     "selection_env_source="
+    "cluster_runtime_max_memory_path="
+    "runtime_n_list=25000 50000 75000 100000"
+    "speedup_p_list=2 4 6 8 10 12 14 16 18 20 24 28 32"
+    "oversubscribe_p_list=18 20 24 28 32"
     "dry-run: no cluster commands executed")
     if(NOT run_stdout MATCHES "${required_text}")
         message(FATAL_ERROR "missing expected dry-run text '${required_text}' in:\n${run_stdout}\n${run_stderr}")

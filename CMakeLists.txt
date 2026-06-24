@@ -302,6 +302,17 @@ if(BUILD_TESTING)
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/RunSequentialRunMetricsSmoke.cmake
     )
     add_test(
+        NAME sequential_limit_n_smoke
+        COMMAND
+            ${CMAKE_COMMAND}
+            -DGENERATE_VECTORS=$<TARGET_FILE:generate_vectors>
+            -DGENERATE_QUERIES=$<TARGET_FILE:generate_queries>
+            -DSEQUENTIAL=$<TARGET_FILE:sequential_retriever>
+            -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/phase6_sequential_limit_n
+            -P
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/RunSequentialLimitNSmoke.cmake
+    )
+    add_test(
         NAME parallel_run_metrics_smoke
         COMMAND
             ${CMAKE_COMMAND}
@@ -313,6 +324,20 @@ if(BUILD_TESTING)
             -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/phase6_parallel_run_metrics
             -P
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/RunParallelRunMetricsSmoke.cmake
+    )
+    add_test(
+        NAME parallel_limit_n_smoke
+        COMMAND
+            ${CMAKE_COMMAND}
+            -DGENERATE_VECTORS=$<TARGET_FILE:generate_vectors>
+            -DGENERATE_QUERIES=$<TARGET_FILE:generate_queries>
+            -DSEQUENTIAL=$<TARGET_FILE:sequential_retriever>
+            -DPARALLEL=$<TARGET_FILE:parallel_retriever>
+            -DMPIEXEC_EXECUTABLE=${MPIEXEC_EXECUTABLE}
+            -DMPIEXEC_NUMPROC_FLAG=${MPIEXEC_NUMPROC_FLAG}
+            -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/phase6_parallel_limit_n
+            -P
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/RunParallelLimitNSmoke.cmake
     )
     add_test(
         NAME benchmark_select_n_smoke

@@ -63,7 +63,8 @@ int main(int argc, const char* const argv[]) {
         }
 
         const retriever::Logger logger(result.config.log_level);
-        const auto memory_dataset = retriever::BinaryDataset::read_all(result.config.vectors_path);
+        const auto memory_dataset =
+            retriever::BinaryDataset::read_all(result.config.vectors_path, result.config.limit_n);
         const auto query_dataset = retriever::BinaryDataset::read_all(result.config.queries_path);
 
         logger.info(
@@ -76,6 +77,12 @@ int main(int argc, const char* const argv[]) {
             "Loaded " +
             std::to_string(query_dataset.header.num_vectors) +
             " query vectors.");
+        if (result.config.limit_n > 0) {
+            logger.info(
+                "Applied memory prefix limit N=" +
+                std::to_string(memory_dataset.header.num_vectors) +
+                ".");
+        }
 
         const auto retrieval_start = std::chrono::steady_clock::now();
         const auto retrieval_results =

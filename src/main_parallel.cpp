@@ -158,7 +158,8 @@ int main(int argc, char** argv) {
             memory_shard = retriever::BinaryDataset::read_shard(
                 result.config.vectors_path,
                 mpi_session.rank(),
-                mpi_session.size());
+                mpi_session.size(),
+                result.config.limit_n);
             query_header = retriever::BinaryDataset::read_header(result.config.queries_path);
             if (mpi_session.rank() == 0) {
                 query_dataset = retriever::BinaryDataset::read_all(result.config.queries_path);
@@ -190,6 +191,12 @@ int main(int argc, char** argv) {
                 "Running blocking MPI retrieval across " +
                 std::to_string(mpi_session.size()) +
                 " ranks.");
+            if (result.config.limit_n > 0) {
+                logger.info(
+                    "Applied memory prefix limit N=" +
+                    std::to_string(memory_shard.header.num_vectors) +
+                    ".");
+            }
         }
 
         std::vector<float> broadcast_query(

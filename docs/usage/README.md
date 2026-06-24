@@ -113,6 +113,7 @@ Use [mpi-cluster/cluster-runbook.md](mpi-cluster/cluster-runbook.md) when:
 - you already prepared the hostfile, synchronized datasets, and selected-workload manifest manually
 - you want the generic `rag-head + N workers` post-calibration rerun wrapper:
   - `scripts/run_cluster_n_node_bundle.sh`
+- you want that generic wrapper to produce a real ascending `runtime_by_N.csv` sweep plus a fixed speedup sweep through `P=32`, with oversubscription above the hostfile slot total when needed
 - you want FAISS or optional real-corpus work to remain explicit manual steps outside the generic cluster bundle
 
 That bundle keeps the current repo boundaries intact:

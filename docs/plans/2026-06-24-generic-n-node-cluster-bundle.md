@@ -2,7 +2,7 @@
 
 ## Objective
 
-Add a generic post-calibration cluster rerun wrapper that works for `rag-head + N workers` without changing retriever contracts, dataset formats, or the existing validated two-node full bundle.
+Add a generic post-calibration cluster rerun wrapper that works for `rag-head + N workers`, then extend it with a real ascending `runtime_by_N` sweep plus oversubscribed speedup continuation without changing the existing validated two-node full bundle.
 
 ## Scope
 
@@ -10,6 +10,7 @@ Included:
 
 - add a generic `run_cluster_n_node_bundle.sh` operator wrapper
 - add a generic `cluster_n_node_common.sh` helper layer
+- add `--limit-n` support to the retriever CLI so one max-N dataset can drive the cluster runtime-by-N sweep
 - keep setup, dataset generation, dataset sync, and FAISS or real-corpus comparison manual
 - add a tracked `n_node_bundle.env.example`
 - add dry-run smoke coverage for the new wrapper
@@ -36,9 +37,10 @@ The new generic operator surface is:
   - consumes an existing `benchmark_selection.env`
   - assumes the selected and speedup datasets already exist identically on every node
   - runs:
+    - runtime-by-N sweep from smaller `N` values up to `N_MAX_FEASIBLE`
     - selected synthetic correctness run
     - granularity summary
-    - speedup sweep
+    - speedup sweep through `2 4 6 8 10 12 14 16 18 20 24 28 32`
     - cluster postprocess
 
 The generic runbook remains operator-focused:
@@ -77,7 +79,7 @@ Modified:
 
 - the new wrapper works for `rag-head + N workers` when hostfile and dataset paths were prepared manually
 - the wrapper never generates datasets, never `rsync`s files, never SSH-orchestrates workers, and never runs FAISS
-- `--dry-run` reports resolved result paths, parsed node count, total slot budget, and the 4 expected stages
+- `--dry-run` reports resolved result paths, parsed node count, total slot budget, `runtime_n_list`, and the 5 expected stages
 - the existing `run_cluster_two_node_bundle.sh` behavior stays unchanged
 - `cluster-runbook.md` clearly separates:
   - manual setup and sync
@@ -91,6 +93,12 @@ Primary smoke checks:
 
 ```bash
 ctest --test-dir build/debug --output-on-failure -R "cluster_(bundle_dry_run|n_node_bundle_dry_run)_smoke"
+```
+
+Additional limit-prefix coverage:
+
+```bash
+ctest --test-dir build/debug --output-on-failure -R "limit_n|cluster_(bundle_dry_run|n_node_bundle_dry_run)_smoke"
 ```
 
 Discovery and doc-index checks:

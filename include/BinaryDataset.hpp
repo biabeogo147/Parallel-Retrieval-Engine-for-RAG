@@ -50,10 +50,18 @@ public:
 
     static BinaryDatasetHeader read_header(const std::filesystem::path& path);
     static BinaryDatasetContents read_all(const std::filesystem::path& path);
+    static BinaryDatasetContents read_all(
+        const std::filesystem::path& path,
+        std::uint64_t limit_vectors);
     static BinaryDatasetShard read_shard(
         const std::filesystem::path& path,
         int rank,
         int world_size);
+    static BinaryDatasetShard read_shard(
+        const std::filesystem::path& path,
+        int rank,
+        int world_size,
+        std::uint64_t limit_vectors);
     static ShardBounds compute_shard_bounds(
         std::uint64_t total_vectors,
         int rank,

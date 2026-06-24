@@ -201,6 +201,56 @@ void test_read_shard_returns_expected_slice() {
     expect_true(shard.values == expected, "rank1 shard payload should match contiguous slice");
 }
 
+void test_read_all_limit_returns_prefix() {
+    const auto dir = test_dir();
+    const auto path = dir / "prefix.bin";
+
+    const auto header = BinaryDataset::make_header(
+        5,
+        3,
+        BinaryDataset::kFlagNormalized | BinaryDataset::kFlagRowMajor);
+
+    const std::vector<float> values = {
+        0.0f, 1.0f, 2.0f,
+        3.0f, 4.0f, 5.0f,
+        6.0f, 7.0f, 8.0f,
+        9.0f, 10.0f, 11.0f,
+        12.0f, 13.0f, 14.0f,
+    };
+
+    BinaryDataset::write(path, header, values);
+
+    const auto prefix = BinaryDataset::read_all(path, 3);
+    const std::vector<float> expected = {
+        0.0f, 1.0f, 2.0f,
+        3.0f, 4.0f, 5.0f,
+        6.0f, 7.0f, 8.0f,
+    };
+
+    expect_true(prefix.header.num_vectors == 3, "limited read should rewrite num_vectors to the prefix size");
+    expect_true(prefix.values == expected, "limited read should keep only the prefix payload");
+}
+
+void test_read_limit_greater_than_dataset_fails() {
+    const auto dir = test_dir();
+    const auto path = dir / "limit_too_large.bin";
+
+    const auto header = BinaryDataset::make_header(
+        2,
+        2,
+        BinaryDataset::kFlagNormalized | BinaryDataset::kFlagRowMajor);
+    const std::vector<float> values = {
+        1.0f, 0.0f,
+        0.0f, 1.0f,
+    };
+
+    BinaryDataset::write(path, header, values);
+
+    expect_throws<std::runtime_error>(
+        [&]() { (void)BinaryDataset::read_all(path, 3); },
+        "limit");
+}
+
 }  // namespace
 
 int main() {
@@ -212,5 +262,7 @@ int main() {
     test_divisible_shard_bounds();
     test_non_divisible_shard_bounds();
     test_read_shard_returns_expected_slice();
+    test_read_all_limit_returns_prefix();
+    test_read_limit_greater_than_dataset_fails();
     return 0;
 }

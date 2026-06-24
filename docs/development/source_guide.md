@@ -670,7 +670,9 @@ It:
    - per-run result and scratch directories
 5. rejects real execution from `/mnt/...` head-node checkouts
 6. rewrites reduced hostfiles in host order for per-`P` speedup sweeps
-7. centralizes:
+7. reuses one max-N memory dataset for the cluster runtime-by-N sweep through `parallel_retriever --limit-n`
+8. keeps oversubscribed speedup runs alive by falling back to the full hostfile when `P > cluster_p_total`
+9. centralizes:
    - selected-workload path handling
    - speedup-workload path handling
    - WSL-safe OpenMPI flags
@@ -714,7 +716,8 @@ It:
 1. sources `cluster_n_node_common.sh`
 2. loads a shell config file for the prepared N-node environment
 3. copies an existing `benchmark_selection.env` into the cluster result directory
-4. runs the maintained four-stage cluster flow:
+4. runs the maintained five-stage cluster flow:
+   - runtime-by-N sweep
    - selected synthetic correctness run
    - granularity summary
    - speedup sweep
@@ -902,7 +905,7 @@ The `tests/cmake/*.cmake` scripts validate executable-level behavior:
 - `run_faiss_comparison.sh` writes the expected FAISS synthetic and real-corpus artifacts on a reduced smoke profile
 - `analyze_benchmarks.py` writes derived analysis outputs, invalid-correctness gating, and the final report-ready Markdown review
 - `run_cluster_postprocess.sh` writes the expected cluster figures, derived analysis outputs, and cluster review doc on fixture input
-- `run_cluster_n_node_bundle.sh --dry-run` prints the expected four-stage plan, parsed node count, and cluster result paths
+- `run_cluster_n_node_bundle.sh --dry-run` prints the expected five-stage plan, parsed node count, runtime-by-N list, speedup list, and cluster result paths
 - `run_cluster_two_node_bundle.sh --dry-run` prints the expected six-stage plan and cluster result paths
 
 ## Source Boundaries to Remember After Phase 8
@@ -1257,7 +1260,7 @@ Use this file when you want to answer: "What exactly is this file responsible fo
 
 **Responsibility**
 
-- orchestrates the generic four-stage post-calibration N-node cluster rerun flow
+- orchestrates the generic five-stage post-calibration N-node cluster rerun flow
 
 ## `scripts/run_cluster_postprocess.sh`
 

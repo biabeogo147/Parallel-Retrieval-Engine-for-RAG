@@ -38,6 +38,20 @@ bool parse_positive_int(const std::string& value, int& parsed) {
     }
 }
 
+bool parse_positive_u64(const std::string& value, std::uint64_t& parsed) {
+    try {
+        std::size_t consumed = 0;
+        const auto candidate = std::stoull(value, &consumed);
+        if (consumed != value.size() || candidate == 0) {
+            return false;
+        }
+        parsed = static_cast<std::uint64_t>(candidate);
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
 ParseResult failure(std::string message) {
     ParseResult result;
     result.ok = false;
@@ -104,6 +118,17 @@ ParseResult parse_config(const AppMode mode, const int argc, const char* const a
             }
             if (!parse_positive_int(value.error, result.config.topk)) {
                 return failure("Invalid value for --topk: " + value.error);
+            }
+            continue;
+        }
+
+        if (argument == "--limit-n") {
+            const auto value = read_value(argument);
+            if (!value.ok) {
+                return value;
+            }
+            if (!parse_positive_u64(value.error, result.config.limit_n)) {
+                return failure("Invalid value for --limit-n: " + value.error);
             }
             continue;
         }
@@ -187,6 +212,7 @@ std::string usage_text(const AppMode mode) {
     usage << "  --queries <path>       Path to the query vector dataset.\n";
     usage << "  --output <path>        Path to the output CSV file.\n";
     usage << "  --topk <int>           Number of results to return.\n";
+    usage << "  --limit-n <int>        Limit the memory dataset to its first N vectors.\n";
     usage << "  --log-level <level>    One of: debug, info, warn, error.\n";
     usage << "  --run-metrics <path>   Path to the one-run summary metrics CSV file.\n";
 

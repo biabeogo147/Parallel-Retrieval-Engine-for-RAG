@@ -156,6 +156,23 @@ void validate_write_request(
     }
 }
 
+BinaryDatasetHeader apply_vector_limit(
+    const BinaryDatasetHeader& header,
+    const std::uint64_t limit_vectors) {
+    if (limit_vectors == 0) {
+        return header;
+    }
+
+    if (limit_vectors > header.num_vectors) {
+        throw std::runtime_error(
+            "requested dataset limit exceeds available vectors");
+    }
+
+    BinaryDatasetHeader limited_header = header;
+    limited_header.num_vectors = limit_vectors;
+    return limited_header;
+}
+
 }  // namespace
 
 BinaryDatasetHeader BinaryDataset::make_header(
@@ -210,9 +227,16 @@ BinaryDatasetHeader BinaryDataset::read_header(const std::filesystem::path& path
 }
 
 BinaryDatasetContents BinaryDataset::read_all(const std::filesystem::path& path) {
+    return read_all(path, 0);
+}
+
+BinaryDatasetContents BinaryDataset::read_all(
+    const std::filesystem::path& path,
+    const std::uint64_t limit_vectors) {
     auto stream = open_input(path);
     std::uint64_t actual_file_size = 0;
-    const auto header = read_validated_header(stream, actual_file_size);
+    const auto full_header = read_validated_header(stream, actual_file_size);
+    const auto header = apply_vector_limit(full_header, limit_vectors);
     const auto total_values = expected_value_count(header);
 
     BinaryDatasetContents contents;
@@ -235,9 +259,18 @@ BinaryDatasetShard BinaryDataset::read_shard(
     const std::filesystem::path& path,
     const int rank,
     const int world_size) {
+    return read_shard(path, rank, world_size, 0);
+}
+
+BinaryDatasetShard BinaryDataset::read_shard(
+    const std::filesystem::path& path,
+    const int rank,
+    const int world_size,
+    const std::uint64_t limit_vectors) {
     auto stream = open_input(path);
     std::uint64_t actual_file_size = 0;
-    const auto header = read_validated_header(stream, actual_file_size);
+    const auto full_header = read_validated_header(stream, actual_file_size);
+    const auto header = apply_vector_limit(full_header, limit_vectors);
     const auto bounds = compute_shard_bounds(header.num_vectors, rank, world_size);
 
     BinaryDatasetShard shard;

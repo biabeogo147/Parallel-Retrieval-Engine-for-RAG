@@ -570,10 +570,25 @@ The repository now provides two different physical-cluster operator layers:
 Use the generic N-node wrapper only after the operator has already prepared:
 
 - the authoritative hostfile with explicit `slots=...`
+- the largest runtime-by-N memory dataset referenced by `CLUSTER_RUNTIME_MAX_MEMORY_PATH`, when the operator wants the cluster `runtime_by_N.csv` sweep to cover more than `N_SELECTED`
 - identical selected-workload and speedup-workload dataset paths on every node
 - an existing `benchmark_selection.env`
 
 It intentionally does not generate datasets, `rsync` files, SSH-orchestrate workers, or run FAISS.
+
+Its maintained flow is now:
+
+1. runtime-by-N sweep at fixed `P_SELECTED` using `parallel_retriever --limit-n`
+2. selected synthetic correctness run
+3. granularity summary
+4. speedup sweep through `BENCH_P_LIST`
+5. cluster postprocess
+
+The default generic speedup sweep is fixed to:
+
+- `2 4 6 8 10 12 14 16 18 20 24 28 32`
+
+Rows above the physical slot total intentionally continue through OpenMPI oversubscription.
 
 Typical generic entrypoint:
 

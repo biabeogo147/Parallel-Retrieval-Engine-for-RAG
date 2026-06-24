@@ -114,6 +114,7 @@ Implemented now:
 - `verify_results` correctness-checking path from two top-k CSV inputs to `correctness.csv`
 - per-rank metrics CSV output for the parallel binary
 - optional `--run-metrics` output for sequential and parallel benchmark summaries
+- optional `--limit-n` memory-prefix contract for sequential and parallel retrieval
 - `generate_vectors`, `generate_queries`, and `inspect_dataset`
 - benchmark automation scripts for runtime-by-N selection, correctness, granularity, speedup, and all-in-one experiment runs
 - Phase 8 Python helpers for binary dataset reuse, FAISS exact-flat search, and SQuAD + MiniLM conversion
@@ -121,6 +122,7 @@ Implemented now:
 - `analyze_benchmarks.py` for deterministic post-run analysis under `results/analysis/` plus `docs/analysis/latest-benchmark-review.md`
 - generic physical-cluster rerun wrapper for a prepared `rag-head + N workers` topology:
   - `run_cluster_n_node_bundle.sh`
+  - includes an ascending runtime-by-N sweep plus a fixed speedup sweep through `P=32`, with oversubscription above the hostfile slot total when needed
 - dedicated physical-cluster wrappers for the validated two-node `rag-head + rag-worker1` flow:
   - `run_cluster_two_node_bundle.sh`
   - `run_cluster_postprocess.sh`

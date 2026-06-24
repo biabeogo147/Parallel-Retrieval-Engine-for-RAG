@@ -27,6 +27,14 @@ Use them differently:
 - `run_cluster_n_node_bundle.sh`
   - generic post-calibration rerun only
   - assumes hostfile, datasets, and `benchmark_selection.env` already exist
+  - now runs a five-stage flow:
+    - runtime-by-N sweep at fixed `P_SELECTED`
+    - selected correctness
+    - granularity
+    - speedup through the configured `BENCH_P_LIST`
+    - postprocess
+  - keeps the default generic speedup sweep at `2 4 6 8 10 12 14 16 18 20 24 28 32`
+  - continues above the physical slot total through OpenMPI oversubscription
   - does not generate datasets, sync files, or run FAISS
 - `run_cluster_two_node_bundle.sh`
   - dedicated full-bundle automation for the validated two-node case

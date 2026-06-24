@@ -19,6 +19,7 @@ The generic wrapper introduced here is intentionally post-calibration only. Befo
 
 - release binaries on every node
 - the authoritative hostfile with explicit `slots=...`
+- the largest runtime-by-N memory dataset on every node if you want the new ascending `runtime_by_N.csv` sweep to cover more than `N_SELECTED`
 - the selected-workload memory and query datasets on every node
 - the speedup-workload memory dataset on every node
 - an existing `benchmark_selection.env` on the head node
@@ -102,6 +103,7 @@ rag-worker2 slots=4 max-slots=4
 
 This step leaves the head node with one shared file layout regardless of how you produced it:
 
+- optional `data/cluster_runtime/memory_vectors_max.bin`
 - `data/cluster_selected/memory_vectors.bin`
 - `data/cluster_selected/query_vectors.bin`
 - `data/cluster_speedup/memory_vectors.bin`
@@ -110,10 +112,12 @@ This step leaves the head node with one shared file layout regardless of how you
 
 The generic wrapper expects two prepared workloads:
 
+- runtime-by-N workload
+  - used for the ascending `runtime_by_N.csv` sweep at fixed `P_SELECTED`
 - selected workload
   - used for the sequential versus parallel correctness rerun
 - speedup workload
-  - used for the sequential baseline plus `BENCH_P_LIST` sweep
+  - used for the sequential baseline plus the full `BENCH_P_LIST` sweep, including oversubscribed `P` values above the physical slot total
 
 Choose exactly one option below.
 
@@ -287,10 +291,22 @@ At minimum, confirm these values match the real environment:
 
 Optional:
 
+- `CLUSTER_RUNTIME_MAX_MEMORY_PATH`
 - `CLUSTER_SPEEDUP_QUERY_PATH`
+- `BENCH_N_CANDIDATES`
 - `BENCH_P_LIST`
 - `BENCH_STORAGE_ROOT`
 - `CLUSTER_DOCS_OUTPUT`
+
+Recommended generic defaults for the current `rag-header=8`, `rag-worker1=4`, `rag-worker2=4` cluster:
+
+- `CLUSTER_RUNTIME_MAX_MEMORY_PATH`
+  - point at the largest prepared memory dataset that exists identically on every node
+- `BENCH_N_CANDIDATES`
+  - use an ascending list such as `1000000 2000000 ... 10000000` when you want a dense runtime-by-N ladder
+- `BENCH_P_LIST`
+  - keep `2 4 6 8 10 12 14 16 18 20 24 28 32`
+  - runs above `16` intentionally continue through OpenMPI oversubscription
 
 **Expected artifacts**
 
@@ -311,13 +327,16 @@ Optional:
 
 **What success looks like**
 
-- the script prints all four stages:
+- the script prints all five stages:
+  - runtime-by-N sweep
   - selected synthetic correctness run
   - granularity summary
   - speedup sweep
   - postprocess
 - the script finishes with:
   - `Cluster n-node bundle completed at ...`
+- `runtime_by_N.csv` contains multiple ascending `N` rows instead of only one copied selected-run row
+- `speedup.csv` contains the requested `P` sweep through `32`, including oversubscribed rows above `cluster_p_total`
 - `correctness.csv` records only `PASS`
 
 ## 7. Optional Manual FAISS Or Real-Corpus Follow-Up
