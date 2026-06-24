@@ -1,55 +1,57 @@
 # Cluster Runbook
 
-This runbook is the repeatable day-to-day operating flow after the cluster has already passed the initial assembly and validation steps.
+This runbook is the repeatable generic N-node operating flow after the cluster has already passed the initial assembly and validation steps.
 
 All commands below run from the head node unless a section explicitly says otherwise.
 
-If you want the exact validated `rag-head + rag-worker1` process, including the dedicated full-bundle rerun and cluster postprocess flow, use [two-node-runbook-local-plus-199.md](two-node-runbook-local-plus-199.md) instead of adapting this generic guide.
+If you want the exact validated `rag-head + rag-worker1` process, including the dedicated full-bundle rerun and cluster postprocess flow, use [two-node-runbook-two-nodes.md](two-node-runbook-two-nodes.md) instead of adapting this generic guide.
 
-The examples assume:
+The examples below assume:
 
 - canonical repo path: `~/work/Parallel-Retrieval-Engine-for-RAG`
 - authoritative shared-data path: `~/cluster-shared/parallel-rag-data`
-- worker hosts: `rag-worker1`, `rag-worker2`
 - Linux username: `rag`
-- hostfile: `.cache/cluster/hosts.cluster`
-- example slot budget: `4` per node, which implies `-np 12` total
+- hostfile working copy: `.cache/cluster/hosts.cluster`
+- generic wrapper config copy: `.cache/cluster/n_node_bundle.env`
+- generic wrapper manifest copy: `.cache/cluster/benchmark_selection.env`
 
-If your nodes use different slot counts, update both the hostfile and the `-np` values below.
+The generic wrapper introduced here is intentionally post-calibration only. It starts only after you have already prepared all of the following manually:
+
+- release binaries on every node
+- the authoritative hostfile with explicit `slots=...`
+- the selected-workload memory and query datasets on every node
+- the speedup-workload memory dataset on every node
+- an existing `benchmark_selection.env`
+
+The wrapper does not generate datasets, does not `rsync` files, does not SSH-orchestrate workers, and does not run FAISS.
 
 ## 1. Reconfirm Cluster Readiness
 
 **Prerequisites**
 
-- The three-machine cluster already passed [cluster-assembly-and-validation.md](cluster-assembly-and-validation.md).
+- The cluster already passed [cluster-assembly-and-validation.md](cluster-assembly-and-validation.md).
 
 **Bash**
 
 ```bash
 cd ~/work/Parallel-Retrieval-Engine-for-RAG
-ssh rag@rag-worker1 'cd ~/work/Parallel-Retrieval-Engine-for-RAG && hostname && test -x ./build/release/parallel_retriever'
-ssh rag@rag-worker2 'cd ~/work/Parallel-Retrieval-Engine-for-RAG && hostname && test -x ./build/release/parallel_retriever'
+test -x ./build/release/parallel_retriever
+test -x ./build/release/sequential_retriever
+test -x ./build/release/verify_results
+
+for host in rag-worker1 rag-worker2; do
+  ssh "rag@${host}" 'cd ~/work/Parallel-Retrieval-Engine-for-RAG && hostname && test -x ./build/release/parallel_retriever && test -x ./build/release/sequential_retriever && test -x ./build/release/verify_results'
+done
 ```
-
-**Expected artifacts**
-
-- None. This is a readiness check.
 
 **What success looks like**
 
-- Both workers respond and already have release binaries.
-
-**Next step**
-
-- Refresh the release build on every node when needed.
+- every worker responds
+- every node already has the release retriever binaries
 
 ## 2. Refresh The Release Build On Every Node
 
-Run this when the repo changed or when you want to ensure all nodes use the same binary revision.
-
-**Prerequisites**
-
-- SSH from the head node to both workers already works without passwords.
+Run this when the repo changed or when you want to ensure every node uses the same binary revision.
 
 **Bash**
 
@@ -57,250 +59,296 @@ Run this when the repo changed or when you want to ensure all nodes use the same
 cd ~/work/Parallel-Retrieval-Engine-for-RAG
 ./scripts/configure_release.sh
 cmake --build build/release
-ssh rag@rag-worker1 'cd ~/work/Parallel-Retrieval-Engine-for-RAG && ./scripts/configure_release.sh && cmake --build build/release'
-ssh rag@rag-worker2 'cd ~/work/Parallel-Retrieval-Engine-for-RAG && ./scripts/configure_release.sh && cmake --build build/release'
+
+for host in rag-worker1 rag-worker2; do
+  ssh "rag@${host}" 'cd ~/work/Parallel-Retrieval-Engine-for-RAG && ./scripts/configure_release.sh && cmake --build build/release'
+done
 ```
-
-**Expected artifacts**
-
-- Up-to-date release binaries on all three nodes.
 
 **What success looks like**
 
-- All three build commands complete without error.
+- all release builds complete without error
 
-**Next step**
+## 3. Prepare Or Refresh The Authoritative Hostfile
 
-- Create or refresh the authoritative synthetic datasets on the head node.
+The hostfile is the single authoritative topology source for the generic N-node rerun wrapper.
 
-## 3. Create Or Refresh The Authoritative Synthetic Datasets
-
-This runbook keeps one authoritative dataset copy on the head node, then synchronizes that copy into repo-local `data/` directories.
-
-**Prerequisites**
-
-- Release generator binaries exist on the head node.
+Every active line must include explicit `slots=...`.
 
 **Bash**
 
 ```bash
 cd ~/work/Parallel-Retrieval-Engine-for-RAG
-mkdir -p ~/cluster-shared/parallel-rag-data
-./build/release/generate_vectors --N 100000 --D 384 --output ~/cluster-shared/parallel-rag-data/memory_vectors.bin
-./build/release/generate_queries --Q 100 --D 384 --output ~/cluster-shared/parallel-rag-data/query_vectors.bin
-./build/release/inspect_dataset --input ~/cluster-shared/parallel-rag-data/memory_vectors.bin
-./build/release/inspect_dataset --input ~/cluster-shared/parallel-rag-data/query_vectors.bin
+mkdir -p .cache/cluster
+cp docs/usage/mpi-cluster/examples/hosts.example .cache/cluster/hosts.cluster
+nano .cache/cluster/hosts.cluster
+cat .cache/cluster/hosts.cluster
 ```
 
-Replace `N`, `D`, and `Q` with the sizes you actually want to run.
+Example shape:
 
-**Expected artifacts**
-
-- `~/cluster-shared/parallel-rag-data/memory_vectors.bin`
-- `~/cluster-shared/parallel-rag-data/query_vectors.bin`
+```text
+rag-head slots=4 max-slots=4
+rag-worker1 slots=4 max-slots=4
+rag-worker2 slots=4 max-slots=4
+```
 
 **What success looks like**
 
-- Both files exist and inspect cleanly.
+- the hostfile lists exactly the nodes you want to use
+- every entry includes an explicit positive `slots=...` value
 
-**Next step**
+## 4. Create Or Refresh The Prepared Synthetic Datasets
 
-- Synchronize the authoritative data into the local repo `data/` directory on every node.
+The generic wrapper expects two prepared workloads:
 
-## 4. Sync Runtime Datasets To Every Node
+- selected workload
+  - used for the sequential versus parallel correctness rerun
+- speedup workload
+  - used for the sequential baseline plus `BENCH_P_LIST` sweep
 
-**Prerequisites**
-
-- The authoritative head-node datasets already exist.
+The example below keeps them separate under repo-local `data/`.
 
 **Bash**
 
 ```bash
 cd ~/work/Parallel-Retrieval-Engine-for-RAG
-mkdir -p data results
-cp ~/cluster-shared/parallel-rag-data/memory_vectors.bin data/memory_vectors.bin
-cp ~/cluster-shared/parallel-rag-data/query_vectors.bin data/query_vectors.bin
-rsync -av ~/cluster-shared/parallel-rag-data/memory_vectors.bin rag@rag-worker1:~/work/Parallel-Retrieval-Engine-for-RAG/data/
-rsync -av ~/cluster-shared/parallel-rag-data/query_vectors.bin rag@rag-worker1:~/work/Parallel-Retrieval-Engine-for-RAG/data/
-rsync -av ~/cluster-shared/parallel-rag-data/memory_vectors.bin rag@rag-worker2:~/work/Parallel-Retrieval-Engine-for-RAG/data/
-rsync -av ~/cluster-shared/parallel-rag-data/query_vectors.bin rag@rag-worker2:~/work/Parallel-Retrieval-Engine-for-RAG/data/
+mkdir -p data/cluster_selected data/cluster_speedup
+
+# Replace the sizes below with the already-chosen calibration outputs.
+SELECTED_N=100000
+SELECTED_Q=100
+SPEEDUP_N=200000
+D=384
+
+./build/release/generate_vectors \
+  --N "${SELECTED_N}" \
+  --D "${D}" \
+  --output data/cluster_selected/memory_vectors.bin
+
+./build/release/generate_queries \
+  --Q "${SELECTED_Q}" \
+  --D "${D}" \
+  --output data/cluster_selected/query_vectors.bin
+
+./build/release/generate_vectors \
+  --N "${SPEEDUP_N}" \
+  --D "${D}" \
+  --output data/cluster_speedup/memory_vectors.bin
+
+# Optional. If omitted, the wrapper reuses the selected-workload queries.
+cp data/cluster_selected/query_vectors.bin data/cluster_speedup/query_vectors.bin
 ```
 
-**Expected artifacts**
-
-- `data/memory_vectors.bin`
-- `data/query_vectors.bin`
-
-on all three nodes.
+If you already have these binaries from a prior calibration flow, copy them into these paths instead of regenerating them.
 
 **What success looks like**
 
-- Every node now has the same runtime input files in its local repo.
+- the selected-workload memory and query files exist on the head node
+- the speedup-workload memory file exists on the head node
+- any optional speedup query file you want to use exists on the head node
 
-**Next step**
+## 5. Sync The Prepared Datasets To Every Node
 
-- Run the real multi-node parallel retrieval command.
-
-## 5. Run Multi-Node Parallel Retrieval
-
-The example below assumes `4` slots per node in the hostfile, for a total of `12` ranks.
-
-**Prerequisites**
-
-- The hostfile exists at `.cache/cluster/hosts.cluster`.
-- Runtime input datasets exist under `data/` on every node.
-- The release binary paths match on all nodes.
+The generic wrapper assumes these prepared dataset paths already exist identically on every node.
 
 **Bash**
 
 ```bash
 cd ~/work/Parallel-Retrieval-Engine-for-RAG
-mpirun --hostfile .cache/cluster/hosts.cluster -np 12 ./build/release/parallel_retriever \
-  --vectors data/memory_vectors.bin \
-  --queries data/query_vectors.bin \
+
+for host in rag-worker1 rag-worker2; do
+  ssh "rag@${host}" 'mkdir -p ~/work/Parallel-Retrieval-Engine-for-RAG/data/cluster_selected ~/work/Parallel-Retrieval-Engine-for-RAG/data/cluster_speedup'
+
+  rsync -av data/cluster_selected/memory_vectors.bin "rag@${host}:~/work/Parallel-Retrieval-Engine-for-RAG/data/cluster_selected/"
+  rsync -av data/cluster_selected/query_vectors.bin "rag@${host}:~/work/Parallel-Retrieval-Engine-for-RAG/data/cluster_selected/"
+  rsync -av data/cluster_speedup/memory_vectors.bin "rag@${host}:~/work/Parallel-Retrieval-Engine-for-RAG/data/cluster_speedup/"
+
+  if [ -f data/cluster_speedup/query_vectors.bin ]; then
+    rsync -av data/cluster_speedup/query_vectors.bin "rag@${host}:~/work/Parallel-Retrieval-Engine-for-RAG/data/cluster_speedup/"
+  fi
+done
+```
+
+**What success looks like**
+
+- every node now exposes the same prepared dataset paths referenced by the future bundle config
+
+## 6. Prepare The Existing Selection Manifest
+
+The generic wrapper consumes an already-existing `benchmark_selection.env` instead of recalibrating `runtime_by_N.csv` itself.
+
+You can either:
+
+- copy a manifest that came from a prior calibration flow
+- or prepare one manually if you already know the selected values
+
+**Bash**
+
+```bash
+cd ~/work/Parallel-Retrieval-Engine-for-RAG
+mkdir -p .cache/cluster
+cp /path/to/existing/benchmark_selection.env .cache/cluster/benchmark_selection.env
+cat .cache/cluster/benchmark_selection.env
+```
+
+Required fields:
+
+- `N_SELECTED`
+- `N_SPEEDUP`
+- `P_SELECTED`
+- `D`
+- `Q`
+- `K`
+- `EPSILON`
+- `CALIBRATION_MODE`
+- `N_MAX_FEASIBLE`
+
+If you prepare the file manually, keep it as plain `NAME=value` assignments only.
+
+**What success looks like**
+
+- `.cache/cluster/benchmark_selection.env` exists
+- the manifest fields match the prepared dataset sizes and the intended selected process count
+
+## 7. Run The Generic N-Node Post-Calibration Bundle
+
+This is the first automated step in the generic flow.
+
+**Bash**
+
+```bash
+cd ~/work/Parallel-Retrieval-Engine-for-RAG
+mkdir -p .cache/cluster
+cp docs/usage/mpi-cluster/examples/n_node_bundle.env.example .cache/cluster/n_node_bundle.env
+nano .cache/cluster/n_node_bundle.env
+
+bash ./scripts/run_cluster_n_node_bundle.sh \
+  --config .cache/cluster/n_node_bundle.env \
+  --run-tag "$(date +%F)-n-node-bundle"
+```
+
+At minimum, confirm these values match the real environment:
+
+- `CLUSTER_HOSTFILE`
+- `CLUSTER_SELECTION_ENV`
+- `CLUSTER_SELECTED_MEMORY_PATH`
+- `CLUSTER_SELECTED_QUERY_PATH`
+- `CLUSTER_SPEEDUP_MEMORY_PATH`
+- `CLUSTER_HEAD_LAN_CIDR`
+
+Optional:
+
+- `CLUSTER_SPEEDUP_QUERY_PATH`
+- `BENCH_P_LIST`
+- `BENCH_STORAGE_ROOT`
+- `CLUSTER_DOCS_OUTPUT`
+
+**Expected artifacts**
+
+- `results/cluster/<run-tag>/benchmark_selection.env`
+- `results/cluster/<run-tag>/runtime_by_N.csv`
+- `results/cluster/<run-tag>/sequential_topk.csv`
+- `results/cluster/<run-tag>/sequential_run_metrics.csv`
+- `results/cluster/<run-tag>/parallel_topk.csv`
+- `results/cluster/<run-tag>/parallel_metrics.csv`
+- `results/cluster/<run-tag>/parallel_run_metrics.csv`
+- `results/cluster/<run-tag>/correctness.csv`
+- `results/cluster/<run-tag>/granularity.csv`
+- `results/cluster/<run-tag>/granularity_summary.txt`
+- `results/cluster/<run-tag>/speedup.csv`
+- `results/cluster/<run-tag>/analysis/`
+- `results/cluster/<run-tag>/figures/`
+- `docs/analysis/latest-cluster-benchmark-review.md`
+
+**What success looks like**
+
+- the script prints all four stages:
+  - selected synthetic correctness run
+  - granularity summary
+  - speedup sweep
+  - postprocess
+- the script finishes with:
+  - `Cluster n-node bundle completed at ...`
+- `correctness.csv` records only `PASS`
+
+## 8. Optional Manual FAISS Or Real-Corpus Follow-Up
+
+The generic N-node wrapper intentionally stops before FAISS.
+
+Use this section when you want to run a manual synthetic FAISS comparison on the head node after the generic bundle completed.
+
+**Bash**
+
+```bash
+cd ~/work/Parallel-Retrieval-Engine-for-RAG
+RUN_TAG="$(date +%F)-n-node-bundle"
+RESULT_DIR="results/cluster/${RUN_TAG}"
+mkdir -p "${RESULT_DIR}/faiss"
+
+python3 ./scripts/faiss_compare.py \
+  --dataset-name synthetic \
+  --vectors data/cluster_selected/memory_vectors.bin \
+  --queries data/cluster_selected/query_vectors.bin \
   --topk 10 \
-  --output results/parallel_topk.csv \
-  --metrics results/parallel_metrics.csv \
-  --run-metrics results/parallel_run_metrics.csv
-```
+  --threads 4 \
+  --output-topk "${RESULT_DIR}/faiss/synthetic_topk.csv" \
+  --output-metrics "${RESULT_DIR}/faiss/synthetic_run_metrics.csv"
 
-**Expected artifacts**
-
-- `results/parallel_topk.csv`
-- `results/parallel_metrics.csv`
-- `results/parallel_run_metrics.csv`
-
-**What success looks like**
-
-- All output files are written on the head node.
-- `parallel_topk.csv` and `parallel_metrics.csv` use the canonical schemas.
-
-**Next step**
-
-- Run the sequential comparison on the head node using the same local inputs.
-
-## 6. Run The Sequential Comparison On The Head Node
-
-**Prerequisites**
-
-- The same `data/memory_vectors.bin` and `data/query_vectors.bin` exist on the head node.
-
-**Bash**
-
-```bash
-cd ~/work/Parallel-Retrieval-Engine-for-RAG
-./build/release/sequential_retriever \
-  --vectors data/memory_vectors.bin \
-  --queries data/query_vectors.bin \
-  --topk 10 \
-  --output results/sequential_topk.csv \
-  --run-metrics results/sequential_run_metrics.csv
-```
-
-**Expected artifacts**
-
-- `results/sequential_topk.csv`
-- `results/sequential_run_metrics.csv`
-
-**What success looks like**
-
-- The sequential output is available for deterministic comparison against the cluster result.
-
-**Next step**
-
-- Run the correctness checker on the two top-k CSV files.
-
-## 7. Verify The Multi-Node Parallel Output
-
-**Prerequisites**
-
-- `results/sequential_topk.csv` exists.
-- `results/parallel_topk.csv` exists.
-
-**Bash**
-
-```bash
-cd ~/work/Parallel-Retrieval-Engine-for-RAG
 ./build/release/verify_results \
-  --sequential results/sequential_topk.csv \
-  --parallel results/parallel_topk.csv \
+  --sequential "${RESULT_DIR}/sequential_topk.csv" \
+  --parallel "${RESULT_DIR}/faiss/synthetic_topk.csv" \
   --epsilon 1e-5 \
-  --output results/correctness.csv
+  --output "${RESULT_DIR}/faiss/synthetic_correctness.csv"
 ```
 
-**Expected artifacts**
+Optional real-corpus follow-up stays manual as well:
 
-- `results/correctness.csv`
+- prepare the corpus with `scripts/prepare_squad_minilm.py`
+- run sequential retrieval on the head node
+- run parallel retrieval with the same hostfile
+- run `faiss_compare.py`
+- compare the outputs with `verify_results`
 
-**What success looks like**
+If you need the fully maintained FAISS bundle path today, keep using the existing single-machine workflow or the dedicated validated two-node runbook.
 
-- `verify_results` prints `All queries PASS`.
-- The correctness CSV records `PASS` for every query.
+## 9. Optional Postprocess-Only Regeneration
 
-**Next step**
-
-- Archive, inspect, or report the generated outputs from the head node.
-
-## 8. Optional Result Collection And Archiving
-
-Most canonical outputs already live on the head node. Use this step when you want to snapshot a run or collect any manually generated worker-local files.
-
-**Prerequisites**
-
-- The cluster run has already completed.
+Use this when the raw cluster CSVs already exist but `analysis/`, `figures/`, or `docs/analysis/latest-cluster-benchmark-review.md` need to be rebuilt.
 
 **Bash**
 
 ```bash
 cd ~/work/Parallel-Retrieval-Engine-for-RAG
-mkdir -p results/archive/manual-cluster-run
-cp results/parallel_topk.csv results/archive/manual-cluster-run/
-cp results/parallel_metrics.csv results/archive/manual-cluster-run/
-cp results/parallel_run_metrics.csv results/archive/manual-cluster-run/
-cp results/sequential_topk.csv results/archive/manual-cluster-run/
-cp results/sequential_run_metrics.csv results/archive/manual-cluster-run/
-cp results/correctness.csv results/archive/manual-cluster-run/
+RUN_TAG="$(date +%F)-n-node-bundle"
+RESULT_DIR="results/cluster/${RUN_TAG}"
+
+bash ./scripts/run_cluster_postprocess.sh \
+  --results-dir "${RESULT_DIR}" \
+  --docs-output docs/analysis/latest-cluster-benchmark-review.md
 ```
-
-Optional worker pull:
-
-```bash
-cd ~/work/Parallel-Retrieval-Engine-for-RAG
-mkdir -p results/archive/manual-cluster-run/worker1-results
-mkdir -p results/archive/manual-cluster-run/worker2-results
-rsync -av rag@rag-worker1:~/work/Parallel-Retrieval-Engine-for-RAG/results/ results/archive/manual-cluster-run/worker1-results/
-rsync -av rag@rag-worker2:~/work/Parallel-Retrieval-Engine-for-RAG/results/ results/archive/manual-cluster-run/worker2-results/
-```
-
-**Expected artifacts**
-
-- `results/archive/manual-cluster-run/`
 
 **What success looks like**
 
-- The important cluster outputs are preserved in one place on the head node.
+- the cluster result directory contains both:
+  - `analysis/`
+  - `figures/`
+- `docs/analysis/latest-cluster-benchmark-review.md` is refreshed from the selected cluster run
 
-**Next step**
+## 10. What This Generic Runbook Does Not Automate
 
-- Use the normal repo analysis or reporting flow on the archived head-node outputs.
+The generic N-node operator surface still does not automate:
 
-## What This Generic Runbook Does Not Automate
+- hostfile authoring
+- dataset generation
+- `rsync` dataset distribution
+- remote release builds
+- selection-manifest generation
+- FAISS comparison
+- optional real-corpus preparation and reruns
 
-The current repository does not yet provide generic multi-node automation for:
+That split is intentional:
 
-- `bash ./scripts/run_all_experiments.sh`
-- `bash ./scripts/run_faiss_comparison.sh`
-- per-node remote build orchestration beyond the explicit SSH commands in this guide
-
-The one exception is the dedicated validated two-node wrapper flow documented in [two-node-runbook-local-plus-199.md](two-node-runbook-local-plus-199.md):
-
-- `bash ./scripts/run_cluster_two_node_bundle.sh --config .cache/cluster/two_node_bundle.env`
-- `bash ./scripts/run_cluster_postprocess.sh --results-dir results/cluster/<run-tag>`
-
-For large reruns on the current Windows + WSL head node, that dedicated two-node workflow now recommends:
-
-- `BENCH_STORAGE_ROOT=/mnt/e/data/pdp_retrieve_engine`
-
-so the heavy synthetic datasets, benchmark CSVs, `.venv`, and real-corpus caches do not keep expanding the WSL ext4 virtual disk on `C:`.
-
-That operator surface is intentionally case-specific. For broader `head + workers` cluster usage, keep the flow manual and explicit.
+- manual steps remain explicit where they depend on real node inventory and storage layout
+- the generic wrapper only handles the repeated post-calibration benchmark rerun
+- the dedicated validated two-node full bundle remains documented separately in [two-node-runbook-two-nodes.md](two-node-runbook-two-nodes.md)

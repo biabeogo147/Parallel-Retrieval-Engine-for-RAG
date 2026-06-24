@@ -553,6 +553,38 @@ The real-corpus conversion cache is stored under:
 
 - `.cache/real_corpora/squad_minilm/`
 
+## Cluster Bundle Flows
+
+The repository now provides two different physical-cluster operator layers:
+
+- generic prepared-cluster rerun:
+  - `scripts/cluster_n_node_common.sh`
+  - `scripts/run_cluster_n_node_bundle.sh`
+  - documented in `../usage/mpi-cluster/cluster-runbook.md`
+- dedicated validated two-node full bundle:
+  - `scripts/cluster_common.sh`
+  - `scripts/run_cluster_two_node_bundle.sh`
+  - `scripts/run_cluster_postprocess.sh`
+  - documented in `../usage/mpi-cluster/two-node-runbook-two-nodes.md`
+
+Use the generic N-node wrapper only after the operator has already prepared:
+
+- the authoritative hostfile with explicit `slots=...`
+- identical selected-workload and speedup-workload dataset paths on every node
+- an existing `benchmark_selection.env`
+
+It intentionally does not generate datasets, `rsync` files, SSH-orchestrate workers, or run FAISS.
+
+Typical generic entrypoint:
+
+```bash
+cp docs/usage/mpi-cluster/examples/n_node_bundle.env.example .cache/cluster/n_node_bundle.env
+nano .cache/cluster/n_node_bundle.env
+bash ./scripts/run_cluster_n_node_bundle.sh \
+  --config .cache/cluster/n_node_bundle.env \
+  --run-tag "$(date +%F)-n-node-bundle"
+```
+
 ## Dedicated Two-Node Cluster Bundle Flow
 
 The repository now also provides one dedicated physical-cluster operator wrapper for the validated:
@@ -560,7 +592,7 @@ The repository now also provides one dedicated physical-cluster operator wrapper
 - `rag-head`
 - `rag-worker1`
 
-topology documented in `../usage/mpi-cluster/two-node-runbook-local-plus-199.md`.
+topology documented in `../usage/mpi-cluster/two-node-runbook-two-nodes.md`.
 
 Use it only from a WSL-native head-node checkout such as:
 
@@ -721,6 +753,8 @@ POSIX shell helpers intended to run inside Ubuntu WSL.
 - `run_speedup.sh`: speedup benchmark stage
 - `run_all_experiments.sh`: one-command synthetic benchmark orchestration
 - `run_faiss_comparison.sh`: Phase 8 orchestration for sequential / parallel / FAISS comparison
+- `cluster_n_node_common.sh`: shared helpers for the generic post-calibration N-node cluster bundle
+- `run_cluster_n_node_bundle.sh`: generic post-calibration rerun wrapper for a prepared `rag-head + N workers` topology
 - `cluster_common.sh`: shared helpers for the validated two-node cluster bundle and cluster postprocess flow
 - `run_cluster_two_node_bundle.sh`: dedicated full-bundle rerun wrapper for the validated `rag-head + rag-worker1` topology
 - `run_cluster_postprocess.sh`: cluster-only figure and analysis regeneration wrapper

@@ -467,4 +467,14 @@ if(BUILD_TESTING)
             -P
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/RunClusterBundleDryRunSmoke.cmake
     )
+    add_test(
+        NAME cluster_n_node_bundle_dry_run_smoke
+        COMMAND
+            ${CMAKE_COMMAND}
+            -DREPO_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -DBUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}
+            -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/cluster_n_node_bundle_dry_run
+            -P
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/RunClusterNNodeBundleDryRunSmoke.cmake
+    )
 endif()

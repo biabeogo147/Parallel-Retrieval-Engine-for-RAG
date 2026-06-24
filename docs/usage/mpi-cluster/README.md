@@ -8,18 +8,28 @@ It is the operational extension of the existing single-machine WSL workflow. Use
 
 Use this bundle when:
 
-- you want one head node plus two worker nodes
+- you want one head node plus one or more worker nodes
 - or you want to branch into a separate validated two-node runbook from the same entrypoint
 - every node can provide an Ubuntu 24.04 shell
 - you want to start from a fresh machine that does not yet have a local repo checkout
-- you want to run manual multi-node MPI retrieval commands
+- you want to run manual multi-node MPI setup plus a repeatable post-calibration rerun command
 
-The generic cluster guides in this folder remain manual and verification-focused. The repository now also provides one dedicated automation wrapper for the validated `rag-head + rag-worker1` case:
+The generic cluster guides in this folder remain setup-first and verification-focused. The repository now provides:
 
-- `scripts/run_cluster_two_node_bundle.sh`
-- `scripts/run_cluster_postprocess.sh`
+- one generic post-calibration wrapper for a prepared `rag-head + N workers` topology:
+  - `scripts/run_cluster_n_node_bundle.sh`
+- one dedicated automation wrapper for the validated `rag-head + rag-worker1` case:
+  - `scripts/run_cluster_two_node_bundle.sh`
+  - `scripts/run_cluster_postprocess.sh`
 
-Use those scripts only through the dedicated two-node runbook, not as a claim that the generic `head + workers` cluster flow is fully automated.
+Use them differently:
+
+- `run_cluster_n_node_bundle.sh`
+  - generic post-calibration rerun only
+  - assumes hostfile, datasets, and `benchmark_selection.env` already exist
+  - does not generate datasets, sync files, or run FAISS
+- `run_cluster_two_node_bundle.sh`
+  - dedicated full-bundle automation for the validated two-node case
 
 ## Reading Order
 
@@ -27,9 +37,9 @@ Use those scripts only through the dedicated two-node runbook, not as a claim th
    - [node-bootstrap-wsl.md](node-bootstrap-wsl.md)
    - [node-bootstrap-ubuntu.md](node-bootstrap-ubuntu.md)
    - [node-bootstrap-macos-multipass.md](node-bootstrap-macos-multipass.md)
-2. If you want the exact validated `rag-head + rag-worker1` workflow from start to finish, use [two-node-runbook-local-plus-199.md](two-node-runbook-local-plus-199.md).
-3. If you want the generic `head + 2 workers` flow, follow [cluster-assembly-and-validation.md](cluster-assembly-and-validation.md) from the head node after all nodes are ready.
-4. Use [cluster-runbook.md](cluster-runbook.md) for repeatable day-to-day generic cluster runs.
+2. If you want the exact validated `rag-head + rag-worker1` workflow from start to finish, use [two-node-runbook-two-nodes.md](two-node-runbook-two-nodes.md).
+3. If you want the generic `head + workers` flow, follow [cluster-assembly-and-validation.md](cluster-assembly-and-validation.md) from the head node after all nodes are ready.
+4. Use [cluster-runbook.md](cluster-runbook.md) for the generic N-node day-to-day workflow, including the new post-calibration rerun wrapper.
 5. If anything fails, use [troubleshooting.md](troubleshooting.md).
 
 ## Canonical Topology
@@ -113,11 +123,12 @@ This bundle also provides copyable examples:
 
 - [examples/hosts.example](examples/hosts.example)
 - [examples/ssh_config.example](examples/ssh_config.example)
+- [examples/n_node_bundle.env.example](examples/n_node_bundle.env.example)
 - [examples/two_node_bundle.env.example](examples/two_node_bundle.env.example)
 
 Copy these into a repo-local untracked working area such as `.cache/cluster/` and then replace the example IPs, usernames, and slot counts with the values for your environment.
 
-If you do not want to adapt the generic examples yourself, use [two-node-runbook-local-plus-199.md](two-node-runbook-local-plus-199.md) instead. That document already records a real operator flow with concrete values and exact commands.
+If you do not want to adapt the generic examples yourself, use [two-node-runbook-two-nodes.md](two-node-runbook-two-nodes.md) instead. That document already records a real operator flow with concrete values and exact commands.
 
 Treat them differently:
 
@@ -126,6 +137,9 @@ Treat them differently:
 - `ssh_config.example`
   - convenience template for human SSH usage from the head node
   - if you want alias-based SSH globally, merge the relevant host stanzas into `~/.ssh/config`
+- `n_node_bundle.env.example`
+  - shell-sourced operator config for the generic post-calibration N-node rerun wrapper
+  - copy it into `.cache/cluster/`, then replace the hostfile path, selection manifest, and prepared dataset paths
 - `two_node_bundle.env.example`
   - shell-sourced operator config for the dedicated validated two-node bundle wrapper
   - copy it into `.cache/cluster/`, then replace the real hostfile path, worker host, and any benchmark overrides you want to use

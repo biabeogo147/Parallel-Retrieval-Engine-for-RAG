@@ -78,16 +78,18 @@ If you want the fastest path to understanding, read the source in this order:
 31. `scripts/run_speedup.sh`
 32. `scripts/run_all_experiments.sh`
 33. `scripts/run_faiss_comparison.sh`
-34. `scripts/cluster_common.sh`
-35. `scripts/run_cluster_two_node_bundle.sh`
-36. `scripts/run_cluster_postprocess.sh`
-37. `scripts/phase8_common.py`
-38. `scripts/faiss_compare.py`
-39. `scripts/prepare_squad_minilm.py`
-40. `scripts/benchmark_csv.py`
-41. `scripts/analyze_benchmarks.py`
-42. `scripts/plot_results.py`
-43. `tests/BenchmarkMetricsTest.cpp`
+34. `scripts/cluster_n_node_common.sh`
+35. `scripts/run_cluster_n_node_bundle.sh`
+36. `scripts/cluster_common.sh`
+37. `scripts/run_cluster_two_node_bundle.sh`
+38. `scripts/run_cluster_postprocess.sh`
+39. `scripts/phase8_common.py`
+40. `scripts/faiss_compare.py`
+41. `scripts/prepare_squad_minilm.py`
+42. `scripts/benchmark_csv.py`
+43. `scripts/analyze_benchmarks.py`
+44. `scripts/plot_results.py`
+45. `tests/BenchmarkMetricsTest.cpp`
 44. `tests/CorrectnessCheckerTest.cpp`
 45. `tests/SequentialRetrieverTest.cpp`
 46. `tests/ParallelRetrieverTest.cpp`
@@ -653,6 +655,27 @@ It:
    - WSL-specific OpenMPI flags
    - dry-run plan output
 
+### `cluster_n_node_common.sh`
+
+This script is the shared shell helper layer for the generic post-calibration N-node cluster rerun flow.
+
+It:
+
+1. extends `benchmark_common.sh`
+2. validates the sourced generic bundle config
+3. parses a hostfile with explicit `slots=...`
+4. derives:
+   - `cluster_node_count`
+   - `cluster_p_total`
+   - per-run result and scratch directories
+5. rejects real execution from `/mnt/...` head-node checkouts
+6. rewrites reduced hostfiles in host order for per-`P` speedup sweeps
+7. centralizes:
+   - selected-workload path handling
+   - speedup-workload path handling
+   - WSL-safe OpenMPI flags
+   - dry-run plan output
+
 ### `run_cluster_two_node_bundle.sh`
 
 This script is the dedicated operator wrapper for the validated:
@@ -676,6 +699,29 @@ It:
 4. writes the full artifact bundle under:
    - `results/cluster/<run-tag>/`
 5. keeps the generic cluster guides manual by scoping automation to the validated two-node case only
+
+### `run_cluster_n_node_bundle.sh`
+
+This script is the generic operator wrapper for a prepared:
+
+- `rag-head`
+- `rag-worker*`
+
+physical-cluster topology.
+
+It:
+
+1. sources `cluster_n_node_common.sh`
+2. loads a shell config file for the prepared N-node environment
+3. copies an existing `benchmark_selection.env` into the cluster result directory
+4. runs the maintained four-stage cluster flow:
+   - selected synthetic correctness run
+   - granularity summary
+   - speedup sweep
+   - postprocess
+5. writes the full artifact bundle under:
+   - `results/cluster/<run-tag>/`
+6. intentionally excludes dataset generation, file synchronization, SSH orchestration, and FAISS so the generic cluster guides keep those steps explicit
 
 ### `run_cluster_postprocess.sh`
 
@@ -706,9 +752,10 @@ The working pipeline is now:
 8. benchmark automation scripts and figure generation
 9. optional `prepare_squad_minilm.py` conversion for the Phase 8 real-corpus path
 10. `run_faiss_comparison.sh` for synthetic-plus-real FAISS baseline comparison
-11. optional `run_cluster_two_node_bundle.sh` for the validated physical-cluster full bundle
-12. optional `run_cluster_postprocess.sh` for cluster-only figure and analysis regeneration
-13. `analyze_benchmarks.py` for derived analysis CSVs, JSON summaries, and report-ready Markdown conclusions
+11. optional `run_cluster_n_node_bundle.sh` for the generic prepared-cluster post-calibration rerun
+12. optional `run_cluster_two_node_bundle.sh` for the validated physical-cluster full bundle
+13. optional `run_cluster_postprocess.sh` for cluster-only figure and analysis regeneration
+14. `analyze_benchmarks.py` for derived analysis CSVs, JSON summaries, and report-ready Markdown conclusions
 
 In more detail:
 
@@ -737,13 +784,18 @@ In more detail:
    - `results/faiss/*_run_metrics.csv`
    - `results/faiss/*_correctness.csv`
    - `results/faiss/comparison.csv`
-8. the dedicated validated two-node bundle can run the same synthetic and FAISS flows against a physical cluster, then writes:
+8. the generic prepared-cluster bundle can rerun the selected synthetic workload, speedup sweep, and postprocess against a physical cluster, then writes:
+   - `results/cluster/<run-tag>/*.csv`
+   - `results/cluster/<run-tag>/analysis/*`
+   - `results/cluster/<run-tag>/figures/*`
+   - `docs/analysis/latest-cluster-benchmark-review.md`
+9. the dedicated validated two-node bundle can run the same synthetic and FAISS flows against a physical cluster, then writes:
    - `results/cluster/<run-tag>/*.csv`
    - `results/cluster/<run-tag>/faiss/*.csv`
    - `results/cluster/<run-tag>/analysis/*`
    - `results/cluster/<run-tag>/figures/*`
    - `docs/analysis/latest-cluster-benchmark-review.md`
-9. the analysis layer reads the final runtime, correctness, granularity, speedup, and FAISS outputs, then writes:
+10. the analysis layer reads the final runtime, correctness, granularity, speedup, and FAISS outputs, then writes:
    - `results/analysis/*.csv`
    - `results/analysis/benchmark_summary.json`
    - `results/analysis/final_conclusions.md`
@@ -850,6 +902,7 @@ The `tests/cmake/*.cmake` scripts validate executable-level behavior:
 - `run_faiss_comparison.sh` writes the expected FAISS synthetic and real-corpus artifacts on a reduced smoke profile
 - `analyze_benchmarks.py` writes derived analysis outputs, invalid-correctness gating, and the final report-ready Markdown review
 - `run_cluster_postprocess.sh` writes the expected cluster figures, derived analysis outputs, and cluster review doc on fixture input
+- `run_cluster_n_node_bundle.sh --dry-run` prints the expected four-stage plan, parsed node count, and cluster result paths
 - `run_cluster_two_node_bundle.sh --dry-run` prints the expected six-stage plan and cluster result paths
 
 ## Source Boundaries to Remember After Phase 8
@@ -1188,11 +1241,23 @@ Use this file when you want to answer: "What exactly is this file responsible fo
 
 - hosts shared shell helpers for the validated two-node cluster bundle and cluster postprocess flow
 
+## `scripts/cluster_n_node_common.sh`
+
+**Responsibility**
+
+- hosts shared shell helpers for the generic post-calibration N-node cluster bundle
+
 ## `scripts/run_cluster_two_node_bundle.sh`
 
 **Responsibility**
 
 - orchestrates the dedicated six-stage validated two-node cluster rerun flow
+
+## `scripts/run_cluster_n_node_bundle.sh`
+
+**Responsibility**
+
+- orchestrates the generic four-stage post-calibration N-node cluster rerun flow
 
 ## `scripts/run_cluster_postprocess.sh`
 
@@ -1382,6 +1447,12 @@ Use this file when you want to answer: "What exactly is this file responsible fo
 
 - validates the dedicated two-node cluster bundle dry-run plan and result-path reporting
 
+## `tests/cmake/RunClusterNNodeBundleDryRunSmoke.cmake`
+
+**Responsibility**
+
+- validates the generic N-node cluster bundle dry-run plan, parsed node count, and result-path reporting
+
 ## Build File
 
 ## `CMakeLists.txt`
@@ -1448,6 +1519,9 @@ Use this file when you want to answer: "What exactly is this file responsible fo
   - `scripts/phase8_common.py`
   - `scripts/faiss_compare.py`
   - `scripts/prepare_squad_minilm.py`
+- generic post-calibration physical-cluster automation:
+  - `scripts/cluster_n_node_common.sh`
+  - `scripts/run_cluster_n_node_bundle.sh`
 - validated two-node physical-cluster automation:
   - `scripts/cluster_common.sh`
   - `scripts/run_cluster_two_node_bundle.sh`
