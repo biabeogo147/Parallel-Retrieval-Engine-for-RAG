@@ -123,6 +123,7 @@ This bundle also provides copyable examples:
 
 - [examples/hosts.example](examples/hosts.example)
 - [examples/ssh_config.example](examples/ssh_config.example)
+- [examples/benchmark_selection.env.example](examples/benchmark_selection.env.example)
 - [examples/n_node_bundle.env.example](examples/n_node_bundle.env.example)
 - [examples/two_node_bundle.env.example](examples/two_node_bundle.env.example)
 
@@ -140,6 +141,9 @@ Treat them differently:
 - `n_node_bundle.env.example`
   - shell-sourced operator config for the generic post-calibration N-node rerun wrapper
   - copy it into `.cache/cluster/`, then replace the hostfile path, selection manifest, and prepared dataset paths
+- `benchmark_selection.env.example`
+  - shell-sourced selection-manifest template for the generic N-node post-calibration rerun wrapper
+  - use it only when you are not copying a generated `results/benchmark_selection.env` from an earlier benchmark calibration flow
 - `two_node_bundle.env.example`
   - shell-sourced operator config for the dedicated validated two-node bundle wrapper
   - copy it into `.cache/cluster/`, then replace the real hostfile path, worker host, and any benchmark overrides you want to use

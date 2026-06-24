@@ -174,25 +174,53 @@ done
 
 - every node now exposes the same prepared dataset paths referenced by the future bundle config
 
-## 6. Prepare The Existing Selection Manifest
+## 6. Create Or Refresh The Selection Manifest
 
 The generic wrapper consumes an already-existing `benchmark_selection.env` instead of recalibrating `runtime_by_N.csv` itself.
 
-You can either:
+You have two supported paths:
 
-- copy a manifest that came from a prior calibration flow
-- or prepare one manually if you already know the selected values
+- recommended
+  - generate the manifest once with the normal benchmark calibration flow, then copy the generated `results/benchmark_selection.env`
+- manual fallback
+  - copy the example manifest and replace the values by hand only if you already know the selected workload settings
+
+### Option A. Copy A Generated Manifest From The Normal Benchmark Flow
+
+If you do not already have a manifest from an earlier run, generate one first with the standard calibration stage described in [../benchmark-workflows.md](../benchmark-workflows.md).
+
+If the cluster rerun must use a specific selected process count, set `BENCH_P_SELECTED` before calibration so the generated manifest records the intended `P_SELECTED`.
+
+**Bash**
+
+```bash
+cd ~/work/Parallel-Retrieval-Engine-for-RAG
+BENCH_BUILD_DIR="$HOME/work/Parallel-Retrieval-Engine-for-RAG/build/release" \
+BENCH_P_SELECTED=12 \
+bash ./scripts/run_calibrate_target.sh
+
+mkdir -p .cache/cluster
+cp results/benchmark_selection.env .cache/cluster/benchmark_selection.env
+cat .cache/cluster/benchmark_selection.env
+```
+
+If your prior calibration wrote artifacts under a custom `BENCH_RESULTS_DIR` or `BENCH_STORAGE_ROOT`, copy the manifest from that results directory instead of repo-local `results/`.
+
+### Option B. Author The Manifest Manually From The Example
+
+Use this only when you already know the final chosen values and do not want to rerun the normal calibration stage.
 
 **Bash**
 
 ```bash
 cd ~/work/Parallel-Retrieval-Engine-for-RAG
 mkdir -p .cache/cluster
-cp /path/to/existing/benchmark_selection.env .cache/cluster/benchmark_selection.env
+cp docs/usage/mpi-cluster/examples/benchmark_selection.env.example .cache/cluster/benchmark_selection.env
+nano .cache/cluster/benchmark_selection.env
 cat .cache/cluster/benchmark_selection.env
 ```
 
-Required fields:
+Required fields in either path:
 
 - `N_SELECTED`
 - `N_SPEEDUP`
@@ -204,7 +232,15 @@ Required fields:
 - `CALIBRATION_MODE`
 - `N_MAX_FEASIBLE`
 
-If you prepare the file manually, keep it as plain `NAME=value` assignments only.
+Manual-authoring rules:
+
+- `N_SELECTED` must match the selected-workload memory dataset size you prepared in section 4.
+- `N_SPEEDUP` must match the speedup-workload memory dataset size you prepared in section 4.
+- `P_SELECTED` must be the intended selected parallel process count for the correctness and granularity rerun.
+- `D`, `Q`, `K`, and `EPSILON` must match the dataset and retrieval settings you intend to reuse.
+- `CALIBRATION_MODE` should usually stay `N_ONLY` or `N_PLUS_Q`.
+- `N_MAX_FEASIBLE` should be the largest successful `N` from the original calibration story; if you are authoring manually and do not know a separate larger value, keep it equal to `N_SELECTED`.
+- Keep the file as plain `NAME=value` assignments only.
 
 **What success looks like**
 
