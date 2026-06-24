@@ -22,7 +22,7 @@ Before using any benchmark script:
 The fastest prerequisite path is:
 
 ```bash
-bash scripts/configure_debug.sh
+bash ./scripts/configure_debug.sh
 cmake --build build/debug
 ctest --test-dir build/debug --output-on-failure
 ```
@@ -106,7 +106,7 @@ For a detailed explanation of the CSV files produced by these stages, including 
 
 ```bash
 BENCH_STORAGE_ROOT=/mnt/e/data/pdp_retrieve_engine \
-bash scripts/run_all_experiments.sh
+bash ./scripts/run_all_experiments.sh
 ```
 
 **Expected artifacts**
@@ -132,7 +132,7 @@ bash scripts/run_all_experiments.sh
 **Next step**
 
 - Inspect the generated CSVs with [results-csv-reference.md](results-csv-reference.md), or re-run with a reduced custom profile.
-- If you also need the Phase 8 external baseline, run `bash scripts/run_faiss_comparison.sh` afterward.
+- If you also need the Phase 8 external baseline, run `bash ./scripts/run_faiss_comparison.sh` afterward.
 - After the raw benchmark and FAISS outputs exist, run the analysis layer described in section 10.
 
 If you used an external storage root and want a repo-local snapshot afterward, copy the final folder back explicitly, for example:
@@ -151,7 +151,7 @@ rsync -a /mnt/e/data/pdp_retrieve_engine/results/ results/final-rerun/
 **Bash**
 
 ```bash
-bash scripts/run_calibrate_target.sh
+bash ./scripts/run_calibrate_target.sh
 ```
 
 **Expected artifacts**
@@ -185,7 +185,7 @@ bash scripts/run_calibrate_target.sh
 **Bash**
 
 ```bash
-bash scripts/run_correctness.sh
+bash ./scripts/run_correctness.sh
 ```
 
 **Expected artifacts**
@@ -212,7 +212,7 @@ bash scripts/run_correctness.sh
 **Bash**
 
 ```bash
-bash scripts/run_granularity.sh
+bash ./scripts/run_granularity.sh
 ```
 
 **Expected artifacts**
@@ -238,7 +238,7 @@ bash scripts/run_granularity.sh
 **Bash**
 
 ```bash
-bash scripts/run_speedup.sh
+bash ./scripts/run_speedup.sh
 ```
 
 **Expected artifacts**
@@ -276,7 +276,7 @@ BENCH_P_SELECTED=4 \
 BENCH_P_LIST="2 4" \
 BENCH_RESULTS_DIR=results/smoke \
 BENCH_SCRATCH_DIR=.cache/benchmarks-smoke \
-bash scripts/run_all_experiments.sh
+bash ./scripts/run_all_experiments.sh
 ```
 
 **Expected artifacts**
@@ -311,7 +311,7 @@ This workflow is separate from `run_all_experiments.sh`. The synthetic benchmark
 **Bash**
 
 ```bash
-bash scripts/run_faiss_comparison.sh
+bash ./scripts/run_faiss_comparison.sh
 ```
 
 **Expected artifacts**
@@ -371,7 +371,7 @@ python3 ./scripts/prepare_squad_minilm.py \
 
 **Next step**
 
-- Run `bash scripts/run_faiss_comparison.sh` to compare sequential, parallel, and FAISS on both synthetic data and the prepared real corpus.
+- Run `bash ./scripts/run_faiss_comparison.sh` to compare sequential, parallel, and FAISS on both synthetic data and the prepared real corpus.
 
 ## 9. Reduced Or Customized Phase 8 Run
 
@@ -395,7 +395,7 @@ BENCH_RESULTS_DIR=results/faiss-smoke \
 BENCH_FAISS_RESULTS_DIR=results/faiss-smoke/faiss \
 BENCH_SCRATCH_DIR=.cache/benchmarks-faiss-smoke \
 BENCH_SQUAD_OUTPUT_DIR=.cache/real_corpora/squad_minilm_smoke \
-bash scripts/run_faiss_comparison.sh
+bash ./scripts/run_faiss_comparison.sh
 ```
 
 **Expected artifacts**
@@ -421,8 +421,8 @@ bash scripts/run_faiss_comparison.sh
 
 Use this step after:
 
-- `bash scripts/run_all_experiments.sh`
-- `bash scripts/run_faiss_comparison.sh`
+- `bash ./scripts/run_all_experiments.sh`
+- `bash ./scripts/run_faiss_comparison.sh`
 
 so the repo also generates report-ready conclusions from the final CSV set instead of leaving interpretation as a manual step.
 

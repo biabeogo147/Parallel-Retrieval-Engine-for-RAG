@@ -102,7 +102,7 @@ rg -n "run_cluster_n_node_bundle|n_node_bundle.env.example|two-node-runbook-two-
 Direct dry-run check:
 
 ```bash
-bash scripts/run_cluster_n_node_bundle.sh \
+bash ./scripts/run_cluster_n_node_bundle.sh \
   --config .cache/cluster/n_node_bundle.env \
   --run-tag smoke-n-node \
   --dry-run

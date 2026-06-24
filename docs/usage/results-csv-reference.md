@@ -1407,8 +1407,8 @@ Useful reading rules:
 ### `results/cluster/<run-tag>/analysis/`
 
 - derived analysis outputs created by:
-  - `bash scripts/run_cluster_postprocess.sh`
-  - or stage `6/6` of `bash scripts/run_cluster_two_node_bundle.sh`
+  - `bash ./scripts/run_cluster_postprocess.sh`
+  - or stage `6/6` of `bash ./scripts/run_cluster_two_node_bundle.sh`
 - uses the same analysis schema family as `results/analysis/`, just scoped to one dedicated cluster result directory
 - if FAISS is skipped for a cluster rerun, `faiss_analysis.csv` is still present with the same header but may contain zero data rows
 

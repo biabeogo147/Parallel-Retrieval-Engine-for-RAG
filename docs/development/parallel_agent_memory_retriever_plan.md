@@ -1260,7 +1260,7 @@ scripts/plot_results.py
 Chạy một command có thể sinh toàn bộ CSV và figure:
 
 ```bash
-bash scripts/run_all_experiments.sh
+bash ./scripts/run_all_experiments.sh
 ```
 
 ---
@@ -1345,7 +1345,7 @@ python3 scripts/prepare_squad_minilm.py \
   --model sentence-transformers/all-MiniLM-L6-v2 \
   --queries-limit 100
 
-bash scripts/run_faiss_comparison.sh
+bash ./scripts/run_faiss_comparison.sh
 ```
 
 Kết quả cần đạt:
@@ -1403,7 +1403,7 @@ Report trả lời đủ toàn bộ yêu cầu đề.
 
 ```bash
 cd ~/work/Parallel-Retrieval-Engine-for-RAG
-bash scripts/configure_release.sh
+bash ./scripts/configure_release.sh
 cmake --build build/release
 ```
 
@@ -1449,7 +1449,7 @@ mpirun -np 12 ./build/release/parallel_retriever \
 ### Run speedup benchmark
 
 ```bash
-bash scripts/run_speedup.sh
+bash ./scripts/run_speedup.sh
 ```
 
 ### Run FAISS synthetic comparison
@@ -1483,7 +1483,7 @@ python3 scripts/prepare_squad_minilm.py \
 ### Run full FAISS comparison workflow
 
 ```bash
-bash scripts/run_faiss_comparison.sh
+bash ./scripts/run_faiss_comparison.sh
 ```
 
 ---

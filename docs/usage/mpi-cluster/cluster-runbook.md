@@ -57,11 +57,11 @@ Run this when the repo changed or when you want to ensure every node uses the sa
 
 ```bash
 cd ~/work/Parallel-Retrieval-Engine-for-RAG
-bash scripts/configure_release.sh
+bash ./scripts/configure_release.sh
 cmake --build build/release
 
 for host in rag-worker1 rag-worker2; do
-  ssh "rag@${host}" 'cd ~/work/Parallel-Retrieval-Engine-for-RAG && bash scripts/configure_release.sh && cmake --build build/release'
+  ssh "rag@${host}" 'cd ~/work/Parallel-Retrieval-Engine-for-RAG && bash ./scripts/configure_release.sh && cmake --build build/release'
 done
 ```
 
@@ -223,7 +223,7 @@ mkdir -p .cache/cluster
 cp docs/usage/mpi-cluster/examples/n_node_bundle.env.example .cache/cluster/n_node_bundle.env
 nano .cache/cluster/n_node_bundle.env
 
-bash scripts/run_cluster_n_node_bundle.sh \
+bash ./scripts/run_cluster_n_node_bundle.sh \
   --config .cache/cluster/n_node_bundle.env \
   --run-tag "$(date +%F)-n-node-bundle"
 ```
@@ -323,7 +323,7 @@ cd ~/work/Parallel-Retrieval-Engine-for-RAG
 RUN_TAG="$(date +%F)-n-node-bundle"
 RESULT_DIR="results/cluster/${RUN_TAG}"
 
-bash scripts/run_cluster_postprocess.sh \
+bash ./scripts/run_cluster_postprocess.sh \
   --results-dir "${RESULT_DIR}" \
   --docs-output docs/analysis/latest-cluster-benchmark-review.md
 ```

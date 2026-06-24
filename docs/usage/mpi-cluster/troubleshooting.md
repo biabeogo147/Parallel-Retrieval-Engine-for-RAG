@@ -225,7 +225,7 @@ If one node differs, reclone or move the repo so every node matches the canonica
 From the head node, rebuild that worker:
 
 ```bash
-ssh rag@rag-worker1 'cd ~/work/Parallel-Retrieval-Engine-for-RAG && bash scripts/configure_release.sh && cmake --build build/release'
+ssh rag@rag-worker1 'cd ~/work/Parallel-Retrieval-Engine-for-RAG && bash ./scripts/configure_release.sh && cmake --build build/release'
 ssh rag@rag-worker1 'cd ~/work/Parallel-Retrieval-Engine-for-RAG && test -x ./build/release/parallel_retriever'
 ```
 

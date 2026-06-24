@@ -73,7 +73,7 @@ Phase 1 docs and scripts assume the preferred WSL-native path.
 From the repository root in WSL:
 
 ```bash
-bash scripts/setup_wsl_dev_env.sh
+bash ./scripts/setup_wsl_dev_env.sh
 ```
 
 That script installs:
@@ -112,14 +112,14 @@ Expected result:
 Debug build:
 
 ```bash
-bash scripts/configure_debug.sh
+bash ./scripts/configure_debug.sh
 cmake --build build/debug
 ```
 
 Release build:
 
 ```bash
-bash scripts/configure_release.sh
+bash ./scripts/configure_release.sh
 cmake --build build/release
 ```
 
@@ -134,7 +134,7 @@ mpirun -np 4 ./build/debug/parallel_retriever --help
 Or run the wrapper script:
 
 ```bash
-bash scripts/run_smoke_tests.sh
+bash ./scripts/run_smoke_tests.sh
 ```
 
 If you are still inside a temporary `root` login, OpenMPI blocks `mpirun` unless you explicitly allow it. For one-off verification only:
@@ -245,7 +245,7 @@ cd Parallel-Retrieval-Engine-for-RAG
 ### 3. Install toolchain dependencies
 
 ```bash
-bash scripts/setup_wsl_dev_env.sh
+bash ./scripts/setup_wsl_dev_env.sh
 ```
 
 ## Day-to-Day Build Flow
@@ -253,7 +253,7 @@ bash scripts/setup_wsl_dev_env.sh
 Configure a debug build:
 
 ```bash
-bash scripts/configure_debug.sh
+bash ./scripts/configure_debug.sh
 ```
 
 Build targets:
@@ -271,7 +271,7 @@ ctest --test-dir build/debug --output-on-failure
 Run the repository smoke bundle:
 
 ```bash
-bash scripts/run_smoke_tests.sh
+bash ./scripts/run_smoke_tests.sh
 ```
 
 ## CLI Smoke Commands
@@ -417,7 +417,7 @@ The current run-summary CSV contract is:
 Run the full synthetic benchmark pipeline from WSL:
 
 ```bash
-bash scripts/run_all_experiments.sh
+bash ./scripts/run_all_experiments.sh
 ```
 
 The automation layer now provides:
@@ -492,7 +492,7 @@ Phase 8 adds a separate comparison workflow on top of the existing synthetic ben
 Run the full Phase 8 comparison flow from WSL:
 
 ```bash
-bash scripts/run_faiss_comparison.sh
+bash ./scripts/run_faiss_comparison.sh
 ```
 
 The orchestration script now performs:
@@ -580,7 +580,7 @@ Typical generic entrypoint:
 ```bash
 cp docs/usage/mpi-cluster/examples/n_node_bundle.env.example .cache/cluster/n_node_bundle.env
 nano .cache/cluster/n_node_bundle.env
-bash scripts/run_cluster_n_node_bundle.sh \
+bash ./scripts/run_cluster_n_node_bundle.sh \
   --config .cache/cluster/n_node_bundle.env \
   --run-tag "$(date +%F)-n-node-bundle"
 ```
@@ -624,7 +624,7 @@ Typical entrypoint:
 ```bash
 cp docs/usage/mpi-cluster/examples/two_node_bundle.env.example .cache/cluster/two_node_bundle.env
 nano .cache/cluster/two_node_bundle.env
-bash scripts/run_cluster_two_node_bundle.sh \
+bash ./scripts/run_cluster_two_node_bundle.sh \
   --config .cache/cluster/two_node_bundle.env \
   --run-tag "$(date +%F)-local-plus-199-full-bundle"
 ```

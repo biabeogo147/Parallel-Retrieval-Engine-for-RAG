@@ -22,7 +22,7 @@ python3 ./scripts/analyze_benchmarks.py \
 For a dedicated physical-cluster result directory that already contains the canonical raw CSVs, either run the cluster wrapper:
 
 ```bash
-bash scripts/run_cluster_postprocess.sh \
+bash ./scripts/run_cluster_postprocess.sh \
   --results-dir results/cluster/<run-tag> \
   --docs-output docs/analysis/latest-cluster-benchmark-review.md
 ```

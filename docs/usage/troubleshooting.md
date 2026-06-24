@@ -55,7 +55,7 @@ sudo apt install -y git
 If toolchain commands are missing after clone:
 
 ```bash
-bash scripts/setup_wsl_dev_env.sh
+bash ./scripts/setup_wsl_dev_env.sh
 ```
 
 Then verify:
@@ -106,14 +106,14 @@ The benchmark scripts already apply the root override automatically when they de
 Re-run configure and build:
 
 ```bash
-bash scripts/configure_debug.sh
+bash ./scripts/configure_debug.sh
 cmake --build build/debug
 ```
 
 If you want to verify the common command surface afterward:
 
 ```bash
-bash scripts/run_smoke_tests.sh
+bash ./scripts/run_smoke_tests.sh
 ```
 
 **What success looks like**
@@ -142,7 +142,7 @@ bash scripts/run_smoke_tests.sh
 Optional override:
 
 ```bash
-BENCH_PLOT_VENV_DIR=.venv-custom bash scripts/run_all_experiments.sh
+BENCH_PLOT_VENV_DIR=.venv-custom bash ./scripts/run_all_experiments.sh
 ```
 
 For Phase 8, the same override path applies because `run_faiss_comparison.sh` reuses `BENCH_PLOT_VENV_DIR`.
@@ -166,14 +166,14 @@ If your SQuAD copy lives elsewhere, override the input root:
 
 ```bash
 BENCH_SQUAD_INPUT_DIR=/your/custom/squad/path \
-bash scripts/run_faiss_comparison.sh
+bash ./scripts/run_faiss_comparison.sh
 ```
 
 If you already prepared compatible `vectors.bin` and `queries.bin`, point the workflow at that output directory instead:
 
 ```bash
 BENCH_SQUAD_OUTPUT_DIR=.cache/real_corpora/squad_minilm \
-bash scripts/run_faiss_comparison.sh
+bash ./scripts/run_faiss_comparison.sh
 ```
 
 **What success looks like**
@@ -244,7 +244,7 @@ rm -rf .venv
 Then rebuild as needed:
 
 ```bash
-bash scripts/configure_debug.sh
+bash ./scripts/configure_debug.sh
 cmake --build build/debug
 ```
 

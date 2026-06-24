@@ -409,7 +409,7 @@ RUN_TAG="$(date +%F)-two-nodes-full-bundle"
 
 mkdir -p mkdir -p "$HOME/data/pdp_retrieve_engine"
 
-bash scripts/run_cluster_two_node_bundle.sh \
+bash ./scripts/run_cluster_two_node_bundle.sh \
   --config .cache/cluster/two_node_bundle.env \
   --run-tag "${RUN_TAG}"
 ```
@@ -456,7 +456,7 @@ cd ~/work/Parallel-Retrieval-Engine-for-RAG
 RUN_TAG="$(date +%F)-two-nodes-full-bundle"
 RESULT_DIR="$HOME/data/pdp_retrieve_engineresults/cluster/${RUN_TAG}"
 
-bash scripts/run_cluster_postprocess.sh \
+bash ./scripts/run_cluster_postprocess.sh \
   --results-dir "${RESULT_DIR}" \
   --docs-output docs/analysis/latest-cluster-benchmark-review.md
 ```

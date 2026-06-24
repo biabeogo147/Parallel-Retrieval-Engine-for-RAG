@@ -59,7 +59,7 @@ These are the checks to run before claiming the external-storage rerun path is r
 # from the WSL-native head-node checkout
 ctest --test-dir build/debug --output-on-failure -R cluster_bundle_dry_run_smoke
 
-bash scripts/run_cluster_two_node_bundle.sh \
+bash ./scripts/run_cluster_two_node_bundle.sh \
   --config .cache/cluster/two_node_bundle.env \
   --run-tag <new-run-tag> \
   --dry-run
@@ -68,7 +68,7 @@ bash scripts/run_cluster_two_node_bundle.sh \
 If WSL and the worker are both healthy, the next step is the real rerun with:
 
 ```bash
-bash scripts/run_cluster_two_node_bundle.sh \
+bash ./scripts/run_cluster_two_node_bundle.sh \
   --config .cache/cluster/two_node_bundle.env \
   --run-tag <new-run-tag>
 ```
