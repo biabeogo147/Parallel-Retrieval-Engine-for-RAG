@@ -163,10 +163,10 @@ mkdir -p data/cluster_selected data/cluster_speedup
 mkdir -p .cache/cluster
 
 # Replace the values below with the already-chosen workload settings.
-SELECTED_N=100000
-SELECTED_Q=100
-SPEEDUP_N=200000
-SELECTED_P=12
+SELECTED_N=10000000
+SELECTED_Q=400
+SPEEDUP_N=2000000
+SELECTED_P=16
 D=384
 K=10
 EPSILON=1e-5
