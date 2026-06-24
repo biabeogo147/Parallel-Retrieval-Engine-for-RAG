@@ -3,7 +3,7 @@
 set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-. "$script_dir/benchmark_common.sh"
+bash "$script_dir/benchmark_common.sh"
 
 results_dir=
 docs_output="$repo_root/docs/analysis/latest-cluster-benchmark-review.md"

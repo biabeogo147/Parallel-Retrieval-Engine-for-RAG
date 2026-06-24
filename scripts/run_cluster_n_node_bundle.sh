@@ -3,7 +3,7 @@
 set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-. "$script_dir/cluster_n_node_common.sh"
+bash "$script_dir/cluster_n_node_common.sh"
 
 config_path=
 run_tag_override=

@@ -3,7 +3,7 @@
 set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-. "$script_dir/benchmark_common.sh"
+bash "$script_dir/benchmark_common.sh"
 
 init_benchmark_env
 ensure_benchmark_dirs

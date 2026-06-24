@@ -3,7 +3,7 @@
 set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-. "$script_dir/common.sh"
+bash "$script_dir/common.sh"
 
 detect_physical_cores() {
     if command -v lscpu >/dev/null 2>&1; then

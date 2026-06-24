@@ -3,12 +3,12 @@
 set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-. "$script_dir/benchmark_common.sh"
+bash "$script_dir/benchmark_common.sh"
 
 init_benchmark_env
 ensure_benchmark_dirs
 if ! selection_manifest_is_complete "$selection_env_path"; then
-    "$script_dir/run_calibrate_target.sh"
+    bash "$script_dir/run_calibrate_target.sh"
 fi
 load_selection_env
 

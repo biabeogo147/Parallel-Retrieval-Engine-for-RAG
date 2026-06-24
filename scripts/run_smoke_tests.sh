@@ -3,7 +3,7 @@
 set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-. "$script_dir/common.sh"
+bash "$script_dir/common.sh"
 
 build_dir=${1:-"$repo_root/build/debug"}
 mpi_procs=${MPI_PROCS:-4}
