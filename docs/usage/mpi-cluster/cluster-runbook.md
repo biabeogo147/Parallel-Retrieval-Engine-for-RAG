@@ -15,13 +15,13 @@ The examples below assume:
 - generic wrapper config copy: `.cache/cluster/n_node_bundle.env`
 - generic wrapper manifest copy: `.cache/cluster/benchmark_selection.env`
 
-The generic wrapper introduced here is intentionally post-calibration only. It starts only after you have already prepared all of the following manually:
+The generic wrapper introduced here is intentionally post-calibration only. Before you invoke it, the environment must already provide all of the following:
 
 - release binaries on every node
 - the authoritative hostfile with explicit `slots=...`
 - the selected-workload memory and query datasets on every node
 - the speedup-workload memory dataset on every node
-- an existing `benchmark_selection.env`
+- an existing `benchmark_selection.env` on the head node
 
 The wrapper does not generate datasets, does not `rsync` files, does not SSH-orchestrate workers, and does not run FAISS.
 
@@ -98,7 +98,15 @@ rag-worker2 slots=4 max-slots=4
 - the hostfile lists exactly the nodes you want to use
 - every entry includes an explicit positive `slots=...` value
 
-## 4. Create Or Refresh The Prepared Synthetic Datasets
+## 4. Prepare The Head-Node Inputs And Selection Manifest
+
+This step leaves the head node with one shared file layout regardless of how you produced it:
+
+- `data/cluster_selected/memory_vectors.bin`
+- `data/cluster_selected/query_vectors.bin`
+- `data/cluster_speedup/memory_vectors.bin`
+- optional `data/cluster_speedup/query_vectors.bin`
+- `.cache/cluster/benchmark_selection.env`
 
 The generic wrapper expects two prepared workloads:
 
@@ -107,19 +115,61 @@ The generic wrapper expects two prepared workloads:
 - speedup workload
   - used for the sequential baseline plus `BENCH_P_LIST` sweep
 
-The example below keeps them separate under repo-local `data/`.
+Choose exactly one option below.
+
+### Option A. Use The Normal Calibration Flow
+
+Use this when you want the repo-standard calibration stage to choose `N_SELECTED`, `N_SPEEDUP`, `Q`, and the selected process count for you.
+
+Calibration runs only on the head node. It does not `rsync` files, does not SSH to workers, and does not update remote binaries. This runbook then copies the generated outputs into the stable repo-local `data/cluster_*` paths so the later sync step stays identical to the manual path.
+
+**Bash**
+
+```bash
+cd ~/work/Parallel-Retrieval-Engine-for-RAG
+BENCH_BUILD_DIR="$HOME/work/Parallel-Retrieval-Engine-for-RAG/build/release" \
+BENCH_P_SELECTED=12 \
+bash ./scripts/run_calibrate_target.sh
+
+mkdir -p data/cluster_selected data/cluster_speedup
+mkdir -p .cache/cluster
+
+. results/benchmark_selection.env
+
+cp results/benchmark_selection.env .cache/cluster/benchmark_selection.env
+cp ".cache/benchmarks/memory_vectors_N${N_SELECTED}_D${D}.bin" data/cluster_selected/memory_vectors.bin
+cp ".cache/benchmarks/query_vectors_Q${Q}_D${D}.bin" data/cluster_selected/query_vectors.bin
+cp ".cache/benchmarks/memory_vectors_N${N_SPEEDUP}_D${D}.bin" data/cluster_speedup/memory_vectors.bin
+
+# Optional. If omitted, the wrapper reuses the selected-workload queries.
+cp data/cluster_selected/query_vectors.bin data/cluster_speedup/query_vectors.bin
+
+cat .cache/cluster/benchmark_selection.env
+```
+
+If your calibration used a custom `BENCH_RESULTS_DIR`, `BENCH_SCRATCH_DIR`, or `BENCH_STORAGE_ROOT`, replace the `results/...` and `.cache/benchmarks/...` source paths above with the real calibration output paths.
+
+### Option B. Create The Inputs And Manifest Manually
+
+Use this when you already know the selected workload settings and want to create the exact cluster input paths yourself.
+
+The example below keeps the selected and speedup workloads separate under repo-local `data/`.
 
 **Bash**
 
 ```bash
 cd ~/work/Parallel-Retrieval-Engine-for-RAG
 mkdir -p data/cluster_selected data/cluster_speedup
+mkdir -p .cache/cluster
 
-# Replace the sizes below with the already-chosen calibration outputs.
+# Replace the values below with the already-chosen workload settings.
 SELECTED_N=100000
 SELECTED_Q=100
 SPEEDUP_N=200000
+SELECTED_P=12
 D=384
+K=10
+EPSILON=1e-5
 
 ./build/release/generate_vectors \
   --N "${SELECTED_N}" \
@@ -138,17 +188,52 @@ D=384
 
 # Optional. If omitted, the wrapper reuses the selected-workload queries.
 cp data/cluster_selected/query_vectors.bin data/cluster_speedup/query_vectors.bin
+
+cp docs/usage/mpi-cluster/examples/benchmark_selection.env.example .cache/cluster/benchmark_selection.env
+nano .cache/cluster/benchmark_selection.env
+cat .cache/cluster/benchmark_selection.env
 ```
 
-If you already have these binaries from a prior calibration flow, copy them into these paths instead of regenerating them.
+When editing the manifest in this manual path, set these fields from the values above:
+
+- `N_SELECTED=${SELECTED_N}`
+- `N_SPEEDUP=${SPEEDUP_N}`
+- `P_SELECTED=${SELECTED_P}`
+- `D=${D}`
+- `Q=${SELECTED_Q}`
+- `K=${K}`
+- `EPSILON=${EPSILON}`
+
+Required manifest fields in either path:
+
+- `N_SELECTED`
+- `N_SPEEDUP`
+- `P_SELECTED`
+- `D`
+- `Q`
+- `K`
+- `EPSILON`
+- `CALIBRATION_MODE`
+- `N_MAX_FEASIBLE`
+
+Manual-authoring rules:
+
+- `N_SELECTED` must match `data/cluster_selected/memory_vectors.bin`.
+- `N_SPEEDUP` must match `data/cluster_speedup/memory_vectors.bin`.
+- `P_SELECTED` must be the intended selected parallel process count for the correctness and granularity rerun.
+- `D`, `Q`, `K`, and `EPSILON` must match the dataset and retrieval settings you intend to reuse.
+- `CALIBRATION_MODE` should usually stay `N_ONLY` or `N_PLUS_Q`.
+- `N_MAX_FEASIBLE` should be the largest successful `N` from the original calibration story; if you are authoring manually and do not know a separate larger value, keep it equal to `N_SELECTED`.
+- Keep the file as plain `NAME=value` assignments only.
 
 **What success looks like**
 
-- the selected-workload memory and query files exist on the head node
-- the speedup-workload memory file exists on the head node
-- any optional speedup query file you want to use exists on the head node
+- `.cache/cluster/benchmark_selection.env` exists
+- the manifest fields match the prepared dataset sizes and the intended selected process count
 
 ## 5. Sync The Prepared Datasets To Every Node
+
+After either option in step 4, sync the prepared dataset paths so every node exposes the same runtime files.
 
 The generic wrapper assumes these prepared dataset paths already exist identically on every node.
 
@@ -174,82 +259,9 @@ done
 
 - every node now exposes the same prepared dataset paths referenced by the future bundle config
 
-## 6. Create Or Refresh The Selection Manifest
+## 6. Run The Generic N-Node Post-Calibration Bundle
 
-The generic wrapper consumes an already-existing `benchmark_selection.env` instead of recalibrating `runtime_by_N.csv` itself.
-
-You have two supported paths:
-
-- recommended
-  - generate the manifest once with the normal benchmark calibration flow, then copy the generated `results/benchmark_selection.env`
-- manual fallback
-  - copy the example manifest and replace the values by hand only if you already know the selected workload settings
-
-### Option A. Copy A Generated Manifest From The Normal Benchmark Flow
-
-If you do not already have a manifest from an earlier run, generate one first with the standard calibration stage described in [../benchmark-workflows.md](../benchmark-workflows.md).
-
-If the cluster rerun must use a specific selected process count, set `BENCH_P_SELECTED` before calibration so the generated manifest records the intended `P_SELECTED`.
-
-**Bash**
-
-```bash
-cd ~/work/Parallel-Retrieval-Engine-for-RAG
-BENCH_BUILD_DIR="$HOME/work/Parallel-Retrieval-Engine-for-RAG/build/release" \
-BENCH_P_SELECTED=12 \
-bash ./scripts/run_calibrate_target.sh
-
-mkdir -p .cache/cluster
-cp results/benchmark_selection.env .cache/cluster/benchmark_selection.env
-cat .cache/cluster/benchmark_selection.env
-```
-
-If your prior calibration wrote artifacts under a custom `BENCH_RESULTS_DIR` or `BENCH_STORAGE_ROOT`, copy the manifest from that results directory instead of repo-local `results/`.
-
-### Option B. Author The Manifest Manually From The Example
-
-Use this only when you already know the final chosen values and do not want to rerun the normal calibration stage.
-
-**Bash**
-
-```bash
-cd ~/work/Parallel-Retrieval-Engine-for-RAG
-mkdir -p .cache/cluster
-cp docs/usage/mpi-cluster/examples/benchmark_selection.env.example .cache/cluster/benchmark_selection.env
-nano .cache/cluster/benchmark_selection.env
-cat .cache/cluster/benchmark_selection.env
-```
-
-Required fields in either path:
-
-- `N_SELECTED`
-- `N_SPEEDUP`
-- `P_SELECTED`
-- `D`
-- `Q`
-- `K`
-- `EPSILON`
-- `CALIBRATION_MODE`
-- `N_MAX_FEASIBLE`
-
-Manual-authoring rules:
-
-- `N_SELECTED` must match the selected-workload memory dataset size you prepared in section 4.
-- `N_SPEEDUP` must match the speedup-workload memory dataset size you prepared in section 4.
-- `P_SELECTED` must be the intended selected parallel process count for the correctness and granularity rerun.
-- `D`, `Q`, `K`, and `EPSILON` must match the dataset and retrieval settings you intend to reuse.
-- `CALIBRATION_MODE` should usually stay `N_ONLY` or `N_PLUS_Q`.
-- `N_MAX_FEASIBLE` should be the largest successful `N` from the original calibration story; if you are authoring manually and do not know a separate larger value, keep it equal to `N_SELECTED`.
-- Keep the file as plain `NAME=value` assignments only.
-
-**What success looks like**
-
-- `.cache/cluster/benchmark_selection.env` exists
-- the manifest fields match the prepared dataset sizes and the intended selected process count
-
-## 7. Run The Generic N-Node Post-Calibration Bundle
-
-This is the first automated step in the generic flow.
+This is the first automated step in the generic flow after the hostfile, head-node input files, and selection manifest are already ready.
 
 **Bash**
 
@@ -308,7 +320,7 @@ Optional:
   - `Cluster n-node bundle completed at ...`
 - `correctness.csv` records only `PASS`
 
-## 8. Optional Manual FAISS Or Real-Corpus Follow-Up
+## 7. Optional Manual FAISS Or Real-Corpus Follow-Up
 
 The generic N-node wrapper intentionally stops before FAISS.
 
@@ -348,7 +360,7 @@ Optional real-corpus follow-up stays manual as well:
 
 If you need the fully maintained FAISS bundle path today, keep using the existing single-machine workflow or the dedicated validated two-node runbook.
 
-## 9. Optional Postprocess-Only Regeneration
+## 8. Optional Postprocess-Only Regeneration
 
 Use this when the raw cluster CSVs already exist but `analysis/`, `figures/`, or `docs/analysis/latest-cluster-benchmark-review.md` need to be rebuilt.
 
@@ -371,7 +383,7 @@ bash ./scripts/run_cluster_postprocess.sh \
   - `figures/`
 - `docs/analysis/latest-cluster-benchmark-review.md` is refreshed from the selected cluster run
 
-## 10. What This Generic Runbook Does Not Automate
+## 9. What This Generic Runbook Does Not Automate
 
 The generic N-node operator surface still does not automate:
 
